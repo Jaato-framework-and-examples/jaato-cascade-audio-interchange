@@ -70,9 +70,15 @@ plugin_configs:
         voice: alloy
         format: pcm16
 
-      # NOTE: `tool_choice: required` would be the natural fix for this
-      # model narrating the words "signal completion" (it writes the tool
-      # name as TEXT, and an audio turn speaks its text).  It is omitted
-      # because it is INERT on OpenRouter -- openrouter/provider.py never
-      # forwards tool_choice and the contract declares
-      # `tool_choice_forwarding=False`.  See KNOWN_ISSUES.md.
+      # NO `tool_choice: required` here, though it now reaches the wire
+      # (openrouter gained tool_choice forwarding; the contract declares
+      # `tool_choice_forwarding=True`).  MEASURED over three consecutive
+      # runs it does exactly what it says and that is the problem:
+      #
+      #   without it:  2 generations, model speaks, then narrates
+      #                "signal_completion" as text and is nudged
+      #   with it:     1 generation, native call, ZERO audio chunks
+      #
+      # The model satisfies `required` by calling the tool and saying
+      # nothing -- which removes the one thing this stage exists to
+      # produce.  See KNOWN_ISSUES.md.

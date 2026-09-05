@@ -34,9 +34,7 @@ import uuid
 import wave
 from pathlib import Path
 
-import jaato_sdk
 from jaato_sdk import ClientType, EventType, IPCClient, SessionCreateFailed
-from jaato_sdk.events import ToolOutputEvent
 
 HERE = Path(__file__).resolve().parent
 ENV_FILE = str(HERE / ".env")
@@ -89,28 +87,12 @@ def _resolve_cascade_id(args: list[str]) -> str:
     return uuid.uuid4().hex
 
 
-def require_media_sdk() -> None:
-    """Refuse to run against an SDK that cannot carry media.
-
-    ``ToolOutputEvent`` only grew ``mime_type``/``data_b64`` with binary
-    media delivery.  Against an older SDK the daemon still sends the
-    fields and the event still arrives -- pydantic just drops them, so
-    the failure surfaces as an ``AttributeError`` raised inside an event
-    handler, several frames from anything the reader wrote.  Checking the
-    contract up front turns that into one sentence.
-
-    This is a version skew a venv makes easy to hit: an editable install
-    pointing at one checkout while ``PYTHONPATH`` points the daemon at
-    another means the two halves speak different event shapes.
-    """
-    missing = {"mime_type", "data_b64", "stream_id", "sequence"} - set(
-        ToolOutputEvent.model_fields)
-    if missing:
-        raise SystemExit(
-            f"this jaato_sdk has no media fields on ToolOutputEvent "
-            f"({', '.join(sorted(missing))}) -- it predates binary media "
-            f"delivery.\n  in use: {jaato_sdk.__file__}\n"
-            f"  point PYTHONPATH at the checkout the daemon runs.")
+#: Wire protocol that first carries media on ToolOutputEvent
+#: (`mime_type` / `data_b64` / `sequence` / `stream_id` / `final`).
+#: Declaring it is what turns "the model never spoke" into a refused
+#: connection naming the version: an older daemon simply never sends
+#: those fields, which is indistinguishable from a silent model.
+MEDIA_PROTOCOL = "1.4"
 
 
 def _new_client() -> IPCClient:
@@ -118,6 +100,7 @@ def _new_client() -> IPCClient:
     return IPCClient(
         SOCKET,
         client_type=ClientType.API,   # load-bearing: keeps signal_completion
+        min_protocol_version=MEDIA_PROTOCOL,
         auto_start=True,
         env_file=ENV_FILE,            # never None (handshake crashes on None)
         workspace_path=WORKSPACE,
@@ -214,7 +197,6 @@ async def main() -> int:
         print("could not connect/autostart the daemon — run jaato-doctor")
         return 1
 
-    require_media_sdk()
     cascade_id = _resolve_cascade_id(sys.argv[1:])
     CASCADE_ID_FILE.parent.mkdir(parents=True, exist_ok=True)
     CASCADE_ID_FILE.write_text(cascade_id)

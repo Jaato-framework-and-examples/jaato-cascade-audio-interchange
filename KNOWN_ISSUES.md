@@ -12,7 +12,7 @@ symptom knows why the code looks the way it does.
 | [#820][820] | `jaato-scaffold`: `--provider`/`--model` shouldn't be required for cascade/observer | no workaround needed |
 | [#821][821] | `jaato-scaffold new observer` emits wire event-type values; the daemon filters on class names | **worked around** |
 | [#822][822] | Tiered profile without top-level `provider:` fails bootstrap | **worked around** |
-| [#823][823] | `jaato-doctor` doesn't detect client/daemon SDK checkout skew | **worked around** |
+| [#823][823] | `jaato-doctor` doesn't detect client/daemon SDK checkout skew | superseded — see below |
 
 [820]: https://github.com/Jaato-framework-and-examples/jaato/issues/820
 [821]: https://github.com/Jaato-framework-and-examples/jaato/issues/821
@@ -68,9 +68,40 @@ appears as an `AttributeError` several frames from anything you wrote.
 Every surface reports healthy throughout: socket listening, handshake
 fine, session runs, events arrive.
 
-**Workaround:** both scripts call `require_media_sdk()` before
-connecting and refuse with one sentence naming the offending
-`jaato_sdk.__file__`.
+**No workaround here any more.** The first version of this tree carried
+a hand-rolled `require_media_sdk()` that inspected `ToolOutputEvent`'s
+fields at startup. That duplicated a mechanism the SDK already has: a
+client declares the wire protocol it needs and the handshake refuses
+anything older. Media delivery is protocol **1.4**, so both scripts now
+say so once:
+
+```python
+MEDIA_PROTOCOL = "1.4"
+IPCClient(SOCKET, ..., min_protocol_version=MEDIA_PROTOCOL)
+```
+
+Against an older daemon that produces
+
+```
+IncompatibleServerError: Server protocol 1.3 is not supported by this
+client (requires >= 1.4): server minor 3 is below client's required
+minor 4 — daemon is missing fields the client depends on.
+Daemon package: 0.7.0.
+```
+
+That covers the direction that matters in deployment — *the daemon is
+too old*. It does **not** cover the dev-environment skew #823 describes
+(an editable install pointing at one checkout while the daemon runs
+another via `PYTHONPATH`), because there the daemon is new enough and
+the client simply cannot parse what it sends. That remains #823's job.
+
+Using the mechanism also turned up a bug in it: the compat gate built
+its error out of instance state that `disconnect()` had already cleared,
+so `IncompatibleServerError` was always constructed with `None` and its
+own constructor then crashed on `None.split(".")`. The refusal surfaced
+as `ConnectionError: Handshake failed: 'NoneType' object has no
+attribute 'split'` — meaning the gate had never once produced its
+intended message. Fixed upstream on the media branch.
 
 ---
 
@@ -103,12 +134,17 @@ Three responses were considered:
   model would read the JSON out loud, and stripping the block from the
   text afterwards cannot unspeak the audio. It also withholds the native
   `tools` array that the model uses correctly on the second turn.
-- **`api_params.tool_choice: required`** — the right lever, but inert on
-  OpenRouter: `openrouter/provider.py` never forwards `tool_choice`, and
-  the contract honestly declares `tool_choice_forwarding=False`. The
-  implementation exists on `_openai_compat/base.py`, which openrouter
-  does not inherit — the same gap that made model audio unreachable
-  through OpenRouter in the first place.
+- **`api_params.tool_choice: required`** — implemented, then rejected on
+  measurement. OpenRouter genuinely never forwarded `tool_choice` (the
+  contract declared `tool_choice_forwarding=False`, and the provider had
+  no such parameter at all), so it was wired up: `complete()` now takes
+  the argument its own contract already declared, the knob is declared,
+  and the capability is true. It reaches the wire and does exactly what
+  it promises — **one** generation, a native call, no nudge. It also
+  produces **zero audio**, measured over three consecutive runs: the
+  model satisfies `required` by calling the tool and saying nothing,
+  which removes the one thing this stage exists to produce. The knob is
+  therefore useful and correct, and wrong here.
 - **Splitting the roles across two tiers** — a speaking tier answers, a
   cheap text tier owns completion. No framework change, but heavier for
   a one-question stage.
@@ -116,15 +152,19 @@ Three responses were considered:
 Unresolved. The persona has been left as-is so the behaviour stays
 reproducible.
 
-## A stale validator warning
+---
 
-`jaato-scaffold validate` reports on any outbound modality:
+# Fixed upstream while building this
 
-> `outbound_modality_not_deliverable`: … no adapter parses
-> model-generated media and the streaming callback is text-only, so
-> nothing can deliver it yet.
+## A stale validator warning — fixed
 
-That was true when written and is false now — this demo plays the audio.
-The check should be conditioned on the provider's `output_media`
-capability rather than asserted flatly, or every operator who writes a
-working speaking tier is told their profile is inert.
+`jaato-scaffold validate` used to report, on *any* outbound modality,
+that no adapter could deliver model media and the declaration was inert.
+True when written; false the moment one could — at which point it told
+every author of a working speaking tier that their profile did nothing.
+
+It now asks the provider instead of asserting: the warning fires only
+when the named provider does not declare `output_media`. Six adapters
+that decode model media now declare it (openrouter, plus the
+`_openai_compat` five), and this workspace's profile validates with no
+errors and no warnings.

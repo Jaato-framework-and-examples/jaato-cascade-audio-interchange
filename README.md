@@ -64,17 +64,24 @@ Add `--no-audio` to the observer to trace without sound.
 jaato-doctor --workspace . --env-file .env
 ```
 
-### The SDK must match the daemon
+### The daemon must speak protocol 1.4
 
-Both scripts refuse to start against a `jaato_sdk` whose
-`ToolOutputEvent` has no `mime_type` / `data_b64` — the fields only exist
-once binary media delivery is present. Against an older SDK the daemon
-still sends them and pydantic silently drops them, so the failure would
-otherwise surface as an `AttributeError` deep inside an event handler.
+Media on `ToolOutputEvent` (`mime_type`, `data_b64`, `sequence`,
+`stream_id`, `final`) arrived in wire protocol **1.4**, so both scripts
+declare it:
 
-This is easy to hit with two checkouts and one virtualenv: an editable
-install pointing at one tree while the daemon runs another via
-`PYTHONPATH`. Point them at the same tree.
+```python
+IPCClient(SOCKET, ..., min_protocol_version="1.4")
+```
+
+Against an older daemon the connection is refused by name rather than
+running and hearing nothing — those fields are simply never sent, which
+is indistinguishable from a model that chose not to speak.
+
+Separately, note that an editable install pointing at one checkout while
+the daemon runs another via `PYTHONPATH` gives the two halves different
+event shapes, and no version check catches that (the daemon is new
+enough; the client just cannot parse it). See KNOWN_ISSUES.md #823.
 
 ## Layout
 
