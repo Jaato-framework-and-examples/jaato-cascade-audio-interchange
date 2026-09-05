@@ -55,6 +55,10 @@ EVENT_TYPES = [
 
 MODEL_MEDIA_CALL_ID = "model-output"
 
+#: Events after which no more speech can arrive for the current
+#: utterance, so the players may drain and exit.
+_END_OF_SPEECH = frozenset({"TurnCompletedEvent", "SessionTerminatedEvent"})
+
 
 #: Wire protocol that first carries media on ToolOutputEvent
 #: (`mime_type` / `data_b64` / `sequence` / `stream_id` / `final`).
@@ -218,7 +222,11 @@ async def main() -> int:
         print("could not connect/autostart the daemon — run jaato-doctor")
         return 1
 
-    print(f"observing cascade {cascade_id} — Ctrl-C to stop")
+    # flush=True is load-bearing: stdout is block-buffered when
+    # redirected to a file or pipe, so a launcher waiting for this line
+    # to know the observer is attached would wait forever and fall back
+    # to sleeping a guessed number of seconds.  `run.sh` waits on it.
+    print(f"observing cascade {cascade_id} — Ctrl-C to stop", flush=True)
     chunks = 0
     try:
         async for ev in client.cascade_events(
@@ -230,7 +238,20 @@ async def main() -> int:
                             base64.b64decode(ev.data_b64))
                 if getattr(ev, "final", False):
                     player.finish(ev.stream_id)
-    except KeyboardInterrupt:
+            elif type(ev).__name__ in _END_OF_SPEECH:
+                # Close the players when the TURN ends, because nothing
+                # in the media stream itself says "that was the last
+                # chunk": model speech never carries `final=True` today,
+                # so waiting for it leaves paplay holding an open stdin
+                # forever -- the process never exits, and neither does
+                # anything waiting on it.  The turn ending is the signal
+                # the model has stopped talking.
+                player.finish_all()
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        # asyncio.run() cancels the pending `q.get()` and re-raises
+        # KeyboardInterrupt from the runner, so catching only the latter
+        # here let a CancelledError escape and bury the summary under a
+        # traceback.  Stopping an observer is a normal way to end it.
         pass
     finally:
         player.finish_all()
@@ -241,4 +262,9 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
+    try:
+        sys.exit(asyncio.run(main()))
+    except KeyboardInterrupt:
+        # Re-raised by asyncio.run after it cancels the task; the
+        # summary has already printed by then.
+        sys.exit(0)

@@ -10,3 +10,4 @@ out/
 __pycache__/
 *.pyc
 .jaato/.artifact_tracker.json
+.jaato/observer.log

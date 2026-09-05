@@ -149,8 +149,27 @@ Three responses were considered:
   cheap text tier owns completion. No framework change, but heavier for
   a one-question stage.
 
-Unresolved. The persona has been left as-is so the behaviour stays
-reproducible.
+**Partly solved, by the persona.** The persona now states that
+everything written is spoken aloud, and that finishing is an action
+rather than something you say. Measured over three Spanish runs, the
+model stopped writing the tool name entirely:
+
+```
+'El cielo en un día despejado suele ser azul.'
+'El cielo en un día despejado suele ser de un azul muy claro.'
+'El cielo en un día despejado suele ser azul.'
+```
+
+Spanish answers went from **7.90s to 3.2-4.05s** — over half of that
+audio had been the model reading a function call out loud, JSON braces
+and field names included, which is also the clearest evidence for why
+`prose_tool_calls` is wrong for a speaking stage.
+
+What it did NOT fix: the model still emits no native tool call on its
+first turn. It simply stopped narrating one. So the nudge still fires
+and every stage still costs two generations — history is still
+`user → model(text) → user(nudge) → model(CALL)`. The audible defect is
+gone; the tool-calling deficiency behind it is not.
 
 ---
 

@@ -27,6 +27,7 @@ shorter than an observer takes to start:
 Preflight:
   jaato-doctor --workspace . --env-file .env
 """
+import argparse
 import asyncio
 import base64
 import sys
@@ -68,23 +69,26 @@ PCM_RATE, PCM_CHANNELS, PCM_WIDTH = 24000, 1, 2
 MODEL_MEDIA_CALL_ID = "model-output"
 
 
-def _resolve_cascade_id(args: list[str]) -> str:
-    """Take the cascade id from argv, else mint one.
+def _parse_args(argv: list[str]) -> argparse.Namespace:
+    """Read the cascade id and the question off the command line.
 
-    Accepting it matters for observation.  A one-stage run finishes in
-    about seven seconds -- less time than a second Python process needs
-    to boot, connect and send ``cascade.register`` -- so an observer
-    started AFTER this driver reliably attaches to a cascade that has
-    already ended and sees nothing.  Agreeing the id up front lets the
-    observer be listening before the first request goes out:
-
-        run_observer.py $CID   &     # attaches first
-        run_cascade.py  $CID         # then fires
+    Accepting the id matters for observation.  A one-stage run finishes
+    in about seven seconds -- less time than a second Python process
+    needs to boot, connect and send ``cascade.register`` -- so an
+    observer started AFTER this driver reliably attaches to a cascade
+    that has already ended and sees nothing.  Agreeing the id up front
+    lets the observer be listening before the first request goes out;
+    `run.sh --observe` does exactly that.
     """
-    for arg in args:
-        if arg and not arg.startswith("-"):
-            return arg.strip()
-    return uuid.uuid4().hex
+    parser = argparse.ArgumentParser(
+        description="Ask a question and receive a spoken answer.")
+    parser.add_argument(
+        "cascade_id", nargs="?", default=None,
+        help="cascade id to run under (default: a fresh one)")
+    parser.add_argument(
+        "-p", "--prompt", default=None,
+        help="the question to ask (default: the first stage's own prompt)")
+    return parser.parse_args(argv)
 
 
 #: Wire protocol that first carries media on ToolOutputEvent
@@ -192,19 +196,28 @@ async def _run_stage(client, cascade_id, profile, agent, prompt, speech) -> str:
 
 async def main() -> int:
     """Fire the worklist, then write whatever the model said."""
+    args = _parse_args(sys.argv[1:])
     client = _new_client()
     if not await client.connect(timeout=120.0):
         print("could not connect/autostart the daemon — run jaato-doctor")
         return 1
 
-    cascade_id = _resolve_cascade_id(sys.argv[1:])
+    cascade_id = args.cascade_id or uuid.uuid4().hex
     CASCADE_ID_FILE.parent.mkdir(parents=True, exist_ok=True)
     CASCADE_ID_FILE.write_text(cascade_id)
     print(f"cascade {cascade_id}", flush=True)
 
     speech = SpeechCollector()
     failed = False
-    for i, (profile, agent, prompt) in enumerate(WORKLIST, 1):
+    # ``--prompt`` replaces the FIRST stage's question only.  A later
+    # stage's prompt is the cascade's own wiring -- what stage 2 asks
+    # depends on what stage 1 produced -- so it is not the caller's to
+    # set from a flag.
+    worklist = list(WORKLIST)
+    if args.prompt:
+        profile, agent, _ = worklist[0]
+        worklist[0] = (profile, agent, args.prompt)
+    for i, (profile, agent, prompt) in enumerate(worklist, 1):
         reason = await _run_stage(
             client, cascade_id, profile, agent, prompt, speech)
         print(f"stage {i} [{profile}]: {reason}")

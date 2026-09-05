@@ -37,26 +37,33 @@ rewritten without touching the other.
 
 ## Running it
 
-The driver alone writes a WAV:
-
 ```bash
-python run_cascade.py
-paplay out/answer.wav
+./run.sh                                  # driver only, writes out/answer.wav
+./run.sh -o                               # driver + observer, plays it live
+./run.sh -p "¿Por qué el mar es salado?"  # ask something else
+./run.sh -o -q -p "Count to three."       # observe, trace without sound
 ```
 
-To *hear it live*, the observer must be attached **before** the driver
-fires. A one-stage run takes about seven seconds — less time than a
-second Python process needs to boot, connect and register — so an
-observer started afterwards reliably attaches to a cascade that has
-already ended and sees nothing at all:
+`PYTHON` overrides the interpreter (default `python3`, so an activated
+virtualenv is used as-is).
+
+`-o` exists because **ordering matters**: a one-stage run takes about
+seven seconds, less than a second Python process needs to boot, connect
+and register, so an observer started after the driver attaches to a
+cascade that has already ended and hears nothing at all. `run.sh -o`
+starts the observer first and waits for it to report itself attached
+before firing.
+
+The two scripts can still be driven directly, sharing a cascade id:
 
 ```bash
 CID=$(python -c "import uuid;print(uuid.uuid4().hex)")
-python run_observer.py $CID &     # attaches first
-python run_cascade.py  $CID       # then fires
+python run_observer.py $CID &
+python run_cascade.py  $CID --prompt "What makes a rainbow?"
 ```
 
-Add `--no-audio` to the observer to trace without sound.
+**It answers in the language you ask in** — the persona sets the form,
+not the language.
 
 ### Preflight
 
