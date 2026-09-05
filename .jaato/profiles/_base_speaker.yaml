@@ -1,0 +1,53 @@
+# Tier-1 base for the 'speaker' stage — PROVIDER-AGNOSTIC.
+# Holds stage determinism (plugins, permission policy).  The active
+# model + provider live in profiles/<set>/speaker.yaml, selected by
+# JAATO_PROFILE_SET.  This base MUST stay inherit-able — binding a
+# provider/model here breaks set-selection.
+#
+# No plugins: the stage answers from the prompt alone.  Every tool the
+# model could call is a chance for it to emit a tool call instead of
+# speech, which is the one thing this stage exists to produce.
+name: _base_speaker
+description: Answers a text question with spoken audio (base; bind provider/model in a set).
+plugins: []
+
+# Drop the framework's injected instruction layers.  This stage answers
+# one question out loud with no tools, so the disk instructions and the
+# framework prompt constants (task-completion/verification, parallel
+# batching, turn summaries) are all about work it cannot do — and an
+# audio model pays for that prompt on every turn.
+#
+# `true` keeps the persona, the plugin instructions AND the
+# untrusted-content security boundary; only `disk` and `constants` go.
+suppress_base_instructions: true
+
+# Completion gating.  Declaring a schema is what enables the framework's
+# `signal_completion` lifecycle tool, and calling it is what emits
+# SESSION_TERMINATED -- the event the cascade driver waits on.  Without
+# this the stage would end its turn and never terminate, and the driver
+# would wait forever.
+#
+# Verified against openai/gpt-audio-mini that an audio-emitting turn
+# still makes tool calls: one probe returned 25 audio deltas AND 20
+# tool-call deltas naming signal_completion, so gating and speech
+# coexist in a single turn.
+#
+# `warnings`/`errors` are the escape hatches the payload-schema
+# conventions require: without them a stage that half-succeeded has no
+# way to say so except by failing.
+completion_payload_schema:
+  type: object
+  additionalProperties: false
+  required: [spoken, warnings, errors]
+  properties:
+    spoken:
+      type: string
+      description: A transcript of what you said out loud.
+    warnings:
+      type: array
+      items: {type: string}
+      description: Anything the listener should treat with caution.
+    errors:
+      type: array
+      items: {type: string}
+      description: Reasons the answer is incomplete; empty when it is not.

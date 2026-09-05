@@ -1,0 +1,78 @@
+# speaker — openrouter set: openai/gpt-audio-mini.
+#
+# The tier declares the role; the profile supplies the voice.  Entering
+# the tier is what puts `modalities: ["text","audio"]` on the request —
+# see docs/design/binary-media-chunks.md.
+name: speaker
+inherits: [_base_speaker]
+plugins: []          # empty keeps the inherited _base surface
+
+# REQUIRED even though `model_tiers` names both per tier: the runner's
+# bootstrap envelope validates `model_name` AND `provider_name`
+# (server/runner/session.py), and the daemon fills model_name from the
+# initial tier but NOT provider_name — dropping these fails the session
+# with "envelope.provider_name is empty" before the first request.
+# Note `jaato-scaffold validate` says removing `model` "is also fine";
+# that advice does not hold for a tiered profile.
+model: openai/gpt-audio-mini
+provider: openrouter
+
+# One tier, declaring that it EMITS audio.  `executor` because tier
+# names are a closed set (dispatcher | executor | planner | vision) and
+# this stage is the one doing the work.
+#
+# `audio: outbound` is verified at connect against the provider's
+# `supports_output_modality`, which is why the set MUST also assert
+# `output_modalities` below: no catalog reports what a model can emit,
+# so without the assertion the floor is text-only and this tier is
+# refused at startup rather than at the first spoken word.
+model_tiers:
+  executor:
+    model: openai/gpt-audio-mini
+    provider: openrouter
+    modalities: {audio: outbound}
+    description: 'answers out loud; every reply is returned as speech'
+  initial: executor
+  fallback: executor
+
+# Per-SESSION env.  This block outranks the workspace .env per key and
+# is the ONLY route that resolves secret URIs — the daemon resolves
+# pass:// at spawn, so the credential never lands on disk here and never
+# reaches a process listing.  Requires the gpg-agent to hold the
+# passphrase (`pass show ...` once; this store caches for 400 days).
+# Typed diagnostic log — the validated sibling of JAATO_PROVIDER_TRACE.
+# Relative, so it lands per-session in the session's own workspace.
+trace:
+  provider_log: .jaato/logs/provider_trace.jsonl
+
+env:
+  JAATO_OPENROUTER_API_KEY: "pass://jaato/openrouter/api-key"
+
+plugin_configs:
+  openrouter:
+    api_key: "${JAATO_OPENROUTER_API_KEY}"
+    framework_overrides:
+      # ASSERTS what the model can emit — the opposite direction from
+      # the tier key above, which DECLARES the role and is verified
+      # against this.
+      output_modalities: [text, audio]
+    api_params:
+      # NO temperature here.  The scaffold's default determinism knob is
+      # `temperature: 0.0`, and measured against openai/gpt-audio-mini
+      # that value makes it loop catastrophically: 2046 audio chunks /
+      # 818s of speech for "what colour is the sky", versus 8 chunks /
+      # 3.05s with the provider default.  Determinism is not worth a
+      # 270x answer.
+      # HOW to speak.  The tier says WHAT to emit; these win over the
+      # tier's defaults.  `pcm16` is not a preference — it is the only
+      # format OpenAI emits while streaming, and this stage streams.
+      audio:
+        voice: alloy
+        format: pcm16
+
+      # NOTE: `tool_choice: required` would be the natural fix for this
+      # model narrating the words "signal completion" (it writes the tool
+      # name as TEXT, and an audio turn speaks its text).  It is omitted
+      # because it is INERT on OpenRouter -- openrouter/provider.py never
+      # forwards tool_choice and the contract declares
+      # `tool_choice_forwarding=False`.  See KNOWN_ISSUES.md.
