@@ -60,6 +60,7 @@ make.
 ./run.sh -p "¿Por qué el mar es salado?"  # ask something else
 ./run.sh -o -q -p "Count to three."       # observe, trace without sound
 ./run.sh -s duet                          # the two-tier scenario, below
+./run.sh --socket /tmp/other.sock         # a daemon listening elsewhere
 ```
 
 `-s` picks the **scenario** (`speaker`, the default, or `duet`); `-p`
@@ -139,6 +140,7 @@ enough; the client just cannot parse it). See KNOWN_ISSUES.md #823.
 | `.jaato/agents/speaker.md` | The `speaker` persona — answer in one spoken sentence |
 | `.jaato/profiles/openrouter_gpt_audio_mini/duet.yaml` | The second scenario: a text planner plus a speaking tier |
 | `.jaato/agents/duet.md` | The `duet` persona — decide, delegate the speaking, complete |
+| `.jaato/scripts/processors/spoken_was_spoken.py` | Completion validator: refuses a `spoken` payload the session never delegated |
 
 The base profile stays provider-agnostic on purpose: to try another
 audio model, add a sibling set directory and select it with
@@ -179,6 +181,23 @@ interesting part: the delegate's completion settling is what ENDS the
 turn, so switching back handed the wheel to a tier with no turn to steer.
 Reporting the outcome is what returns control — through the ordinary
 mid-turn path, not through the nudge.
+
+**The payload is checked against what actually happened.** A profile can
+declare a `spoken` field and the model can fill it with text it wrote
+itself, never having entered the speaking tier — which is exactly what a
+twenty-line story request produced once. The schema checks the payload's
+SHAPE; `completion_processors` checks its TRUTH:
+
+```yaml
+completion_processors:
+  - script: scripts/processors/spoken_was_spoken.py
+    on_error: fail_completion
+```
+
+It reads `context.tool_calls` — the session's real tool-call ledger — and
+refuses a non-empty `spoken` when `enter_tier("executor")` was never
+called. Note what that proves: the delegation was *requested*, not that
+audio arrived, since no media count reaches a processor.
 
 > **`exit_on` needs a framework that has it.** An older one parses the
 > profile and ignores the key, so `duet` still runs — with the nudge, as
