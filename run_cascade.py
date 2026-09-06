@@ -35,7 +35,8 @@ import uuid
 import wave
 from pathlib import Path
 
-from jaato_sdk import ClientType, EventType, IPCClient, SessionCreateFailed
+from jaato_sdk import ClientType, IPCClient, SessionCreateFailed
+from jaato_sdk.client.convenience import AgentError
 
 HERE = Path(__file__).resolve().parent
 ENV_FILE = str(HERE / ".env")
@@ -64,9 +65,6 @@ WORKLIST = [
 #: payload, so writing a playable WAV means supplying them.
 PCM_RATE, PCM_CHANNELS, PCM_WIDTH = 24000, 1, 2
 
-#: The reserved call_id for media the MODEL produced, as opposed to
-#: media a tool returned.
-MODEL_MEDIA_CALL_ID = "model-output"
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
@@ -99,18 +97,6 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 MEDIA_PROTOCOL = "1.4"
 
 
-def _new_client() -> IPCClient:
-    """Construct the API client with the known-good knobs."""
-    return IPCClient(
-        SOCKET,
-        client_type=ClientType.API,   # load-bearing: keeps signal_completion
-        min_protocol_version=MEDIA_PROTOCOL,
-        auto_start=True,
-        env_file=ENV_FILE,            # never None (handshake crashes on None)
-        workspace_path=WORKSPACE,
-    )
-
-
 class SpeechCollector:
     """Reassembles model-generated audio from ToolOutputEvent chunks.
 
@@ -125,11 +111,13 @@ class SpeechCollector:
         self._chunks: dict[str, list[tuple[int, bytes]]] = {}
 
     def offer(self, ev) -> None:
-        """Take one event; ignore anything that is not model speech."""
-        if not (ev.mime_type and ev.data_b64):
-            return
-        if ev.call_id != MODEL_MEDIA_CALL_ID:
-            return          # a tool's bytes, not the model's voice
+        """Take one model-speech chunk.
+
+        No filtering here: this is the facade's ``on_media`` sink, which
+        delivers the model's own speech and nothing else.  Re-checking
+        the mime type and call_id would be second-guessing a contract
+        the SDK states -- and a second place for that rule to live.
+        """
         seq = ev.sequence if ev.sequence is not None else 0
         self._chunks.setdefault(ev.stream_id, []).append(
             (seq, base64.b64decode(ev.data_b64)))
@@ -158,49 +146,44 @@ class SpeechCollector:
         return bool(self._chunks)
 
 
-async def _run_stage(client, cascade_id, profile, agent, prompt, speech) -> str:
-    """Run one stage to terminal completion; return its reason.
+async def _run_stage(cascade_id, profile, agent, prompt, speech) -> tuple:
+    """Run one gated stage; return ``(payload, error)``.
 
-    The stage is COMPLETION-GATED: its profile declares a
-    ``completion_payload_schema``, which enables ``signal_completion``,
-    and calling that is what emits SESSION_TERMINATED.  A non-gated stage
-    would end its turn without terminating and this wait would hang.
+    Uses the SDK's session FACADE rather than the event-loop primitives.
+    `Session.complete` owns the send-and-wait recipe for a
+    COMPLETION-GATED profile: it captures the typed payload, raises on an
+    error terminal, and settles when the SESSION does rather than when
+    its first turn ends -- which matters here, because this stage is
+    routinely nudged and a turn boundary would report success while the
+    model still had a tool call to make (jaato #767).
+
+    `on_media` is the same facade's sink for the model's own speech: the
+    payload comes back, the audio is handed over as it streams.
     """
-    done = asyncio.Event()
-    outcome: dict = {}
-
-    def on_done(ev):
-        outcome["reason"] = getattr(ev, "reason", None)
-        outcome["error_summary"] = getattr(ev, "error_summary", None)
-        done.set()
-
-    unsubscribe = client.subscribe(EventType.TOOL_OUTPUT, speech.offer)
-    client.subscribe_once(EventType.SESSION_TERMINATED, on_done)
     try:
-        try:
-            await client.create_session(
-                profile=profile, agent=agent,
-                cascade_driver_id=cascade_id,   # shared slot → warm imports
-                timeout=60.0)
-        except SessionCreateFailed as exc:
-            # A refused stage is a TYPED outcome, not a timeout — an
-            # exhausted budget ceiling means nothing ran, which is not
-            # the same as a stage that ran and failed.
-            return f"spawn_refused: {exc}"
-        await client.send_message(prompt)
-        await done.wait()
-    finally:
-        unsubscribe()
-    return outcome.get("reason") or "unknown"
+        async with IPCClient.session(
+                socket_path=SOCKET,
+                env_file=ENV_FILE,
+                workspace_path=WORKSPACE,
+                client_type=ClientType.API,   # keeps signal_completion
+                min_protocol_version=MEDIA_PROTOCOL,
+                connect_timeout=120.0,
+                profile=profile,
+                agent=agent,
+                cascade_driver_id=cascade_id,   # shared slot -> warm imports
+        ) as session:
+            payload = await session.complete(prompt, on_media=speech.offer)
+        return payload, None
+    except (AgentError, SessionCreateFailed) as exc:
+        # A refused or failed stage is a TYPED outcome, not a timeout: an
+        # exhausted budget ceiling means nothing ran, which is not the
+        # same as a stage that ran and failed.
+        return None, f"{type(exc).__name__}: {exc}"
 
 
 async def main() -> int:
     """Fire the worklist, then write whatever the model said."""
     args = _parse_args(sys.argv[1:])
-    client = _new_client()
-    if not await client.connect(timeout=120.0):
-        print("could not connect/autostart the daemon — run jaato-doctor")
-        return 1
 
     cascade_id = args.cascade_id or uuid.uuid4().hex
     CASCADE_ID_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -217,14 +200,21 @@ async def main() -> int:
     if args.prompt:
         profile, agent, _ = worklist[0]
         worklist[0] = (profile, agent, args.prompt)
+
     for i, (profile, agent, prompt) in enumerate(worklist, 1):
-        reason = await _run_stage(
-            client, cascade_id, profile, agent, prompt, speech)
-        print(f"stage {i} [{profile}]: {reason}")
-        if reason == "error":
+        payload, error = await _run_stage(
+            cascade_id, profile, agent, prompt, speech)
+        if error:
+            print(f"stage {i} [{profile}]: {error}")
             failed = True
             break
-    await client.disconnect()
+        # The completion payload is the stage's ANSWER -- the schema asks
+        # for `spoken`, so read it.  Reporting only "the session ended"
+        # would throw away the transcript the model was made to produce.
+        spoken = (payload or {}).get("spoken", "")
+        print(f"stage {i} [{profile}]: {spoken or '(no transcript)'}")
+        for warning in (payload or {}).get("warnings", []):
+            print(f"  warning: {warning}")
 
     # Report the audio even when a stage failed: partial speech is
     # evidence about what went wrong, and discarding it would throw away

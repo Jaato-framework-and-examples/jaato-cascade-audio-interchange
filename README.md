@@ -35,6 +35,23 @@ the same `ToolOutputEvent` channel.
 the driver. They agree on a cascade id and nothing else, so either can be
 rewritten without touching the other.
 
+**They divide along first-party vs third-party, not lifecycle vs data.**
+The driver owns the cascade's lifecycle *and reads its own result* — it
+opens each stage with `IPCClient.session(...)`, gets the typed completion
+payload back from `session.complete(...)`, and receives the model's speech
+through that call's `on_media` sink. The observer is a *third party*: it
+created nothing, and attaches to a cascade id it was handed
+(`cascade_events(role="observer")`). Those are two different SDK
+mechanisms for two different jobs, which is why both touch media without
+duplicating a responsibility.
+
+**No event-loop plumbing.** The driver contains no `asyncio.Event`, no
+`subscribe`, no `done.wait()`. `Session.complete` owns that recipe —
+including settling when the *session* does rather than when its first turn
+ends, which matters here because this stage is routinely nudged and a turn
+boundary would report success while the model still had a tool call to
+make.
+
 ## Running it
 
 ```bash

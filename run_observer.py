@@ -28,7 +28,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from jaato_sdk import ClientType, EventType, IPCClient
+from jaato_sdk import (MODEL_MEDIA_CALL_ID, ClientType, EventType,
+                       IPCClient)
+from jaato_sdk.events import ToolOutputEvent
 
 HERE = Path(__file__).resolve().parent
 ENV_FILE = str(HERE / ".env")
@@ -53,7 +55,9 @@ EVENT_TYPES = [
     "SessionTerminatedEvent",
 ]
 
-MODEL_MEDIA_CALL_ID = "model-output"
+#: MODEL_MEDIA_CALL_ID comes from the SDK.  It used to be a literal
+#: here, which made this file a second home for a value the daemon
+#: owns -- the kind of copy that is only discovered when it drifts.
 
 #: Events after which no more speech can arrive for the current
 #: utterance, so the players may drain and exit.
@@ -180,12 +184,6 @@ def _resolve_cascade_id(args: list[str]) -> str | None:
     return None
 
 
-def _is_model_speech(ev) -> bool:
-    return bool(getattr(ev, "mime_type", None)
-                and getattr(ev, "data_b64", None)
-                and getattr(ev, "call_id", None) == MODEL_MEDIA_CALL_ID)
-
-
 def _describe(ev) -> str:
     """One line per event, saying what it actually carried.
 
@@ -232,7 +230,9 @@ async def main() -> int:
         async for ev in client.cascade_events(
                 cascade_id, event_types=EVENT_TYPES, role="observer"):
             print(_describe(ev), flush=True)
-            if _is_model_speech(ev):
+            # isinstance first: this iterator yields EVERY subscribed
+            # type, and `is_model_speech` is ToolOutputEvent's alone.
+            if isinstance(ev, ToolOutputEvent) and ev.is_model_speech():
                 chunks += 1
                 player.feed(ev.stream_id, ev.mime_type,
                             base64.b64decode(ev.data_b64))
