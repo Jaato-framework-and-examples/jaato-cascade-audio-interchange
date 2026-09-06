@@ -171,6 +171,24 @@ and every stage still costs two generations — history is still
 `user → model(text) → user(nudge) → model(CALL)`. The audible defect is
 gone; the tool-calling deficiency behind it is not.
 
+**And the completion payload is unreliable because of it.** The driver
+prints `payload["spoken"]`, which is the model's own transcript of what
+it said — correct when it completes on turn one. When the nudge fires,
+the model fills that field describing the NUDGE instead:
+
+```
+[model] 'A rainbow is a colorful arc in the sky formed by sunlight
+         passing through raindrops.'          <- turn 1, spoken
+[user ] 'Your session is about to end without calling signal_completion...'
+[model] CALL {"spoken": "Everything is complete on my end."}
+[model] 'Got it, I understand. Everything is complete on my end.'  <- also SPOKEN
+```
+
+So the driver reports "Everything is complete on my end", and the WAV
+runs ~10s instead of ~3 because the second turn speaks as well. Reading
+the payload is still right — it is the schema's whole purpose — but on
+this model its value is only trustworthy on a single-generation run.
+
 ---
 
 # Fixed upstream while building this
