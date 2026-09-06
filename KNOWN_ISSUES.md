@@ -297,13 +297,36 @@ enter_tier(executor)[gpt-4o-mini] -> SPOKE[gpt-audio-mini]
 
 30.85s of audio, no nudge.
 
-The framework fault is unfixed: **a completion-gated stage can claim in
-its payload that it spoke, with `media_chunks == 0`, and nothing
-objects.** `exit_on: completion` guarantees the RETURN from a
-delegation; nothing guarantees the delegation happens at all. A profile
-that declares an outbound audio tier and finishes having emitted no
-audio is, at minimum, worth a warning — the driver already treats it as
-a failure, but the session does not.
+**Now caught here, by a completion processor.** The framework already
+has the mechanism — `completion_processors` (server 0.6.125+), whose own
+docstring names this use: "use `context.tool_calls` to cross-check
+payload claims against the session's actual tool-call history".
+`scripts/processors/spoken_was_spoken.py` refuses a completion whose
+`spoken` is non-empty when the session never called
+`enter_tier("executor")`, with `on_error: fail_completion` so the model
+gets the error and a turn to do it properly.
+
+Be precise about what it proves: the ledger shows the DELEGATION WAS
+REQUESTED, not that audio arrived. No media count is exposed to a
+processor. So it catches the failure that actually happened — never
+delegating — and would not catch a delegation whose model then said
+nothing.
+
+Two things learned writing it, both worth more than the check itself:
+
+* `ToolCallEntry` is a **TypedDict**, so ledger entries are plain dicts.
+  The first draft used `getattr(call, "name")`, which silently yields
+  `None` on every entry — so no delegation was ever found, every
+  completion was blocked, and the agent looped until its nudges ran out:
+  one run produced **225 seconds** of audio before failing with
+  `NudgeExhausted`.
+* The unit test passed against that broken draft, because it fed
+  `SimpleNamespace` objects. It tested the assumption instead of the
+  contract. The tests now build entries in the ledger's real shape.
+
+`on_error: fail_completion` is worth respecting for that reason: a buggy
+validator does not fail a run, it loops it — and audio makes the cost
+visible in seconds.
 
 ## Overlapping playback — a turn ending is not a stream ending
 

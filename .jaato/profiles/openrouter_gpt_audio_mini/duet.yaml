@@ -32,6 +32,16 @@ model_tiers:
   initial: planner
   fallback: planner
 
+# Refuse a completion whose `spoken` was never spoken.  The schema
+# checks the payload's SHAPE; this checks its TRUTH against the
+# session's own tool-call ledger.  `fail_completion` returns the error
+# to the model, which then has a turn to do it properly.
+completion_processors:
+  - script: scripts/processors/spoken_was_spoken.py
+    name: spoken_was_spoken
+    on_error: fail_completion
+    description: '`spoken` requires that the executor tier was actually entered'
+
 trace:
   provider_log: .jaato/logs/duet_trace.jsonl
 
