@@ -266,6 +266,45 @@ has. It also closes a quieter hole: model media never enters history, so
 without the report the caller could only learn what was said when a
 transcript happened to arrive.
 
+## Nothing checks that a `spoken` payload was ever spoken
+
+A `duet` run asked for a twenty-line story. The planner wrote the story
+in its OWN turn, never entered the executor tier, and then called
+`signal_completion` with the story as `spoken` — asserting it had been
+said aloud when nothing had been. The session reported success; only the
+driver noticed, because it had no audio to write.
+
+```
+[user]        'Narrate a short story of no more than 20 lines'
+[gpt-4o-mini] '<the whole story, as text>'      <- answered directly
+[user]        NUDGE
+[gpt-4o-mini] CALL signal_completion({"spoken": "<the whole story>"})
+```
+
+Two faults, and only one of them was the persona's.
+
+The persona opened with "decide the one short sentence that answers the
+question", so a request for twenty lines contradicted step 1 — and the
+model resolved that by abandoning the whole procedure rather than just
+that step. It now states that the planner CANNOT speak, that its own
+text reaches nobody, and that `enter_tier` comes FIRST, before composing
+anything, whatever the answer's length. Re-measured on the same prompt:
+
+```
+enter_tier(executor)[gpt-4o-mini] -> SPOKE[gpt-audio-mini]
+  -> [delegation report] -> signal_completion[gpt-4o-mini]
+```
+
+30.85s of audio, no nudge.
+
+The framework fault is unfixed: **a completion-gated stage can claim in
+its payload that it spoke, with `media_chunks == 0`, and nothing
+objects.** `exit_on: completion` guarantees the RETURN from a
+delegation; nothing guarantees the delegation happens at all. A profile
+that declares an outbound audio tier and finishes having emitted no
+audio is, at minimum, worth a warning — the driver already treats it as
+a failure, but the session does not.
+
 ---
 
 # Fixed upstream while building this
