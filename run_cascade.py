@@ -32,11 +32,12 @@ import asyncio
 import base64
 import sys
 import uuid
-import wave
 from pathlib import Path
 
 from jaato_sdk import ClientType, IPCClient, SessionCreateFailed
 from jaato_sdk.client.convenience import AgentError
+
+from speech_collector import SpeechCollector
 
 HERE = Path(__file__).resolve().parent
 ENV_FILE = str(HERE / ".env")
@@ -60,10 +61,6 @@ WORKLIST = [
     ("speaker", "speaker", "What colour is the sky on a clear day?"),
 ]
 
-#: OpenAI streams audio as headerless pcm16 — 24 kHz mono signed 16-bit
-#: little-endian.  Headerless means these cannot be recovered from the
-#: payload, so writing a playable WAV means supplying them.
-PCM_RATE, PCM_CHANNELS, PCM_WIDTH = 24000, 1, 2
 
 
 
@@ -102,53 +99,24 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 MEDIA_PROTOCOL = "1.4"
 
 
-class SpeechCollector:
-    """Reassembles model-generated audio from ToolOutputEvent chunks.
 
-    Chunks are keyed by ``stream_id`` because one session may produce
-    several utterances, and ordered by ``sequence`` rather than by
-    arrival: the framework's per-client queue may evict media under
-    backpressure, so a gap is possible, and sorting surfaces it instead
-    of silently splicing the audio.
+
+def speech_sink(collector):
+    """Adapt the SDK's ``on_media`` events to the collector's bytes.
+
+    This is the framework-facing half of collecting speech, and it lives
+    HERE rather than in ``speech_collector`` on purpose: unpacking a
+    ``ToolOutputEvent`` is knowledge about jaato, and the collector is
+    meant to be readable without any.
+
+    No filtering: ``on_media`` delivers the model's own speech and
+    nothing else, so re-checking the mime type or call_id would be
+    second-guessing a contract the SDK states -- and a second place for
+    that rule to live.
     """
-
-    def __init__(self) -> None:
-        self._chunks: dict[str, list[tuple[int, bytes]]] = {}
-
-    def offer(self, ev) -> None:
-        """Take one model-speech chunk.
-
-        No filtering here: this is the facade's ``on_media`` sink, which
-        delivers the model's own speech and nothing else.  Re-checking
-        the mime type and call_id would be second-guessing a contract
-        the SDK states -- and a second place for that rule to live.
-        """
-        seq = ev.sequence if ev.sequence is not None else 0
-        self._chunks.setdefault(ev.stream_id, []).append(
-            (seq, base64.b64decode(ev.data_b64)))
-
-    def write_wav(self, path: Path) -> tuple[int, float, list[int]]:
-        """Write every stream to one WAV; return (bytes, seconds, gaps)."""
-        raw = b""
-        gaps: list[int] = []
-        for stream_id in sorted(self._chunks):
-            ordered = sorted(self._chunks[stream_id])
-            got = [s for s, _ in ordered]
-            expected = list(range(len(ordered)))
-            if got != expected:
-                gaps.extend(sorted(set(expected) - set(got)))
-            raw += b"".join(data for _, data in ordered)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with wave.open(str(path), "wb") as w:
-            w.setnchannels(PCM_CHANNELS)
-            w.setsampwidth(PCM_WIDTH)
-            w.setframerate(PCM_RATE)
-            w.writeframes(raw)
-        seconds = len(raw) / float(PCM_RATE * PCM_CHANNELS * PCM_WIDTH)
-        return len(raw), seconds, gaps
-
-    def __bool__(self) -> bool:
-        return bool(self._chunks)
+    def _sink(ev) -> None:
+        collector.add(ev.stream_id, ev.sequence, base64.b64decode(ev.data_b64))
+    return _sink
 
 
 async def _run_stage(cascade_id, profile, agent, prompt, speech) -> tuple:
@@ -177,7 +145,7 @@ async def _run_stage(cascade_id, profile, agent, prompt, speech) -> tuple:
                 agent=agent,
                 cascade_driver_id=cascade_id,   # shared slot -> warm imports
         ) as session:
-            payload = await session.complete(prompt, on_media=speech.offer)
+            payload = await session.complete(prompt, on_media=speech_sink(speech))
         return payload, None
     except (AgentError, SessionCreateFailed) as exc:
         # A refused or failed stage is a TYPED outcome, not a timeout: an

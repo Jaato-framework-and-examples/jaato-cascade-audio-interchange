@@ -126,6 +126,7 @@ enough; the client just cannot parse it). See KNOWN_ISSUES.md #823.
 | `run_cascade.py` | Fires one stage, reassembles the audio, writes `out/answer.wav` |
 | `run_observer.py` | Attaches to a cascade id, traces events, hands speech to the player |
 | `pulse_playback.py` | PulseAudio playback for headerless PCM — knows nothing about jaato |
+| `speech_collector.py` | Reassembles chunks into a WAV — likewise knows nothing about jaato |
 | `.jaato/profiles/_base_speaker.yaml` | Tier-1 base: no plugins, completion gating, no provider bound |
 | `.jaato/profiles/openrouter_gpt_audio_mini/speaker.yaml` | Tier-2 set: binds OpenRouter + `openai/gpt-audio-mini`, declares the speaking tier |
 | `.jaato/agents/speaker.md` | The `speaker` persona — answer in one spoken sentence |
