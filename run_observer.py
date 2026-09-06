@@ -67,9 +67,20 @@ EVENT_TYPES = [
 #: here, which made this file a second home for a value the daemon
 #: owns -- the kind of copy that is only discovered when it drifts.
 
-#: Events after which no more speech can arrive for the current
-#: utterance, so the players may drain and exit.
-_END_OF_SPEECH = frozenset({"TurnCompletedEvent", "SessionTerminatedEvent"})
+#: Events after which no more speech can arrive AT ALL, so every player
+#: may drain and exit.
+#:
+#: Deliberately NOT TurnCompletedEvent.  A turn ending is not a stream
+#: ending: a duet run completes several turns around the speech, and
+#: closing the player on each one meant the next chunk for the SAME
+#: stream created a fresh `paplay` that began playing while the previous
+#: was still draining.  One 31s narration produced nine players, heard
+#: as several answers at once.
+#:
+#: A stream ends when a different one starts (handled in the feed loop)
+#: or when the session does.  `final=True` would be the direct signal,
+#: but the framework never sets it on model speech -- see KNOWN_ISSUES.
+_END_OF_SPEECH = frozenset({"SessionTerminatedEvent"})
 
 
 #: Wire protocol that first carries media on ToolOutputEvent
@@ -122,8 +133,12 @@ def _describe(ev) -> str:
         origin = ("MODEL SPEECH" if ev.call_id == MODEL_MEDIA_CALL_ID
                   else f"tool media call_id={ev.call_id}")
         final = " FINAL" if getattr(ev, "final", False) else ""
-        return (f"[{et}] {where}  {origin}  seq={ev.sequence} "
-                f"{ev.mime_type} {len(ev.data_b64 or '')}B b64{final}")
+        # stream_id is shown because it is what the PLAYER keys on: one
+        # paplay per stream, so two ids in one run means two processes
+        # writing to the sink at once, which is heard as overlap.
+        return (f"[{et}] {where}  {origin}  stream={ev.stream_id or '-'} "
+                f"seq={ev.sequence} {ev.mime_type} "
+                f"{len(ev.data_b64 or '')}B b64{final}")
     return f"[{et}] {where}"
 
 
@@ -148,6 +163,7 @@ async def main() -> int:
     # to sleeping a guessed number of seconds.  `run.sh` waits on it.
     print(f"observing cascade {cascade_id} — Ctrl-C to stop", flush=True)
     chunks = 0
+    playing = None
     try:
         async for ev in client.cascade_events(
                 cascade_id, event_types=EVENT_TYPES, role="observer"):
@@ -156,6 +172,12 @@ async def main() -> int:
             # type, and `is_model_speech` is ToolOutputEvent's alone.
             if isinstance(ev, ToolOutputEvent) and ev.is_model_speech():
                 chunks += 1
+                # A new stream means the previous utterance is over: let
+                # it drain before this one starts, or they overlap.
+                if ev.stream_id != playing:
+                    if playing is not None:
+                        player.finish(playing)
+                    playing = ev.stream_id
                 player.feed(ev.stream_id, ev.mime_type,
                             base64.b64decode(ev.data_b64))
                 if getattr(ev, "final", False):

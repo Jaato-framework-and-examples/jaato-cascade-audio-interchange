@@ -305,6 +305,42 @@ that declares an outbound audio tier and finishes having emitted no
 audio is, at minimum, worth a warning — the driver already treats it as
 a failure, but the session does not.
 
+## Overlapping playback — a turn ending is not a stream ending
+
+Heard as several answers at once on a long narration. The cause was in
+this repo, not the framework.
+
+`run_observer.py` closed its players on `TurnCompletedEvent`, added so a
+`paplay` fed chunk-by-chunk would not hold an open stdin forever. That is
+the wrong signal: a duet run completes several turns AROUND the speech,
+so the player was closed mid-utterance and the next chunk for the SAME
+stream created a fresh `paplay` — which began playing while the previous
+one was still draining. One 31s narration produced **nine** players from
+a single observer (eight zombies and one stopped), and they outlived the
+run, so the next one played on top of them.
+
+A second constant made it worse: `PulsePlayer.finish` waited
+`timeout=30`, and the narrations were 30.85s and 31.10s. The wait expired,
+the observer gave up and exited, and `paplay` was orphaned — after which
+`run.sh` could not see it either, because it polls by parent pid and the
+parent had just died.
+
+Both are fixed:
+
+* players close when the STREAM changes or the SESSION ends, never on a
+  turn boundary;
+* the drain deadline is derived from the bytes actually written
+  (`bytes / (rate x channels x width) + 15s`) instead of a constant that
+  cannot bound a wait whose length is the caller's data. A player past
+  that deadline is killed rather than orphaned.
+
+Measured after: peak 1 concurrent player on a 31s narration, and nothing
+left running.
+
+`final=True` on the last media chunk would make the stream boundary
+explicit and remove the inference entirely — the field is in the contract
+and the framework never sets it for model speech.
+
 ---
 
 # Fixed upstream while building this

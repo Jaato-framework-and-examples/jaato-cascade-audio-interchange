@@ -48,6 +48,11 @@ class PulsePlayer:
 
     def __init__(self, enabled: bool = True) -> None:
         self._procs: dict[str, subprocess.Popen] = {}
+        #: Bytes handed to each player, and the frame size to turn them
+        #: back into seconds.  A drain deadline has to scale with the
+        #: audio: a fixed one silently orphans anything longer than it.
+        self._written: dict[str, int] = {}
+        self._bytes_per_second: dict[str, int] = {}
         self._enabled = enabled and shutil.which("paplay") is not None
         self._complained = False
         if enabled and not self._enabled:
@@ -74,14 +79,30 @@ class PulsePlayer:
                 self._complain(f"could not start paplay: {exc}")
                 return
             self._procs[stream_id] = proc
+            self._written[stream_id] = 0
+            width = 2 if params["encoding"].endswith("16le") else 1
+            self._bytes_per_second[stream_id] = (
+                int(params["rate"]) * int(params["channels"]) * width)
         try:
             proc.stdin.write(payload)
             proc.stdin.flush()
+            self._written[stream_id] = self._written.get(stream_id, 0) + len(payload)
         except (BrokenPipeError, ValueError) as exc:
             self._complain(f"playback stream died: {exc}")
 
     def finish(self, stream_id: str) -> None:
-        """Close one stream so paplay drains and exits."""
+        """Close one stream and wait for it to finish PLAYING.
+
+        The deadline is derived from the audio handed over, not fixed.
+        It used to be ``timeout=30``, which orphaned every answer longer
+        than thirty seconds: a 31s narration timed out, this process gave
+        up and exited, and ``paplay`` kept playing -- into the NEXT run,
+        heard as two answers at once.  A constant cannot bound a wait
+        whose length is the caller's data.
+
+        The margin covers PulseAudio's own buffering and scheduling, and
+        the floor covers a stream so short the ratio is meaningless.
+        """
         proc = self._procs.pop(stream_id, None)
         if proc is None:
             return
@@ -89,7 +110,18 @@ class PulsePlayer:
             proc.stdin.close()
         except (BrokenPipeError, ValueError):
             pass
-        proc.wait(timeout=30)
+        rate = self._bytes_per_second.pop(stream_id, 0)
+        written = self._written.pop(stream_id, 0)
+        seconds = (written / rate) if rate else 0.0
+        try:
+            proc.wait(timeout=max(15.0, seconds + 15.0))
+        except subprocess.TimeoutExpired:
+            # Past the audio's own duration plus a margin it is wedged,
+            # not playing.  Killing it is better than orphaning it: an
+            # orphan outlives this process and bleeds into the next run.
+            self._complain(f"playback did not finish in {seconds + 15.0:.0f}s; killing")
+            proc.kill()
+            proc.wait(timeout=5)
 
     def finish_all(self) -> None:
         for stream_id in list(self._procs):
