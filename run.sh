@@ -14,11 +14,11 @@
 #   ./run.sh -o                               driver + live audio
 #   ./run.sh -p "Why is the sea salty?"       ask something else
 #   ./run.sh -o -q -p "Count to three."       observe, trace without sound
-#   ./run.sh -P duet                          two tiers: a text model
+#   ./run.sh -s duet                          two tiers: a text model
 #                                             decides and completes, an
 #                                             audio tier only speaks
 #
-# PROFILES  (-P, default: speaker)
+# SCENARIOS  (-s, default: speaker)
 #   speaker  one audio model answers out loud and closes the session.
 #   duet     a text planner delegates the speaking to an audio tier that
 #            is entered and exited automatically (exit_on: completion),
@@ -35,7 +35,7 @@ PYTHON="${PYTHON:-python3}"
 observe=0
 no_audio=0
 prompt=""
-profile=""
+scenario=""
 observer_log="$HERE/.jaato/observer.log"
 
 usage() {
@@ -56,10 +56,10 @@ while [[ $# -gt 0 ]]; do
             [[ $# -ge 2 ]] || { echo "--prompt needs a question" >&2; exit 2; }
             prompt="$2"; shift 2 ;;
         -p=*|--prompt=*) prompt="${1#*=}"; shift ;;
-        -P|--profile)
-            [[ $# -ge 2 ]] || { echo "--profile needs a name" >&2; exit 2; }
-            profile="$2"; shift 2 ;;
-        -P=*|--profile=*) profile="${1#*=}"; shift ;;
+        -s|--scenario)
+            [[ $# -ge 2 ]] || { echo "--scenario needs a name" >&2; exit 2; }
+            scenario="$2"; shift 2 ;;
+        -s=*|--scenario=*) scenario="${1#*=}"; shift ;;
         -h|--help)     usage 0 ;;
         *) echo "unknown option: $1" >&2; usage 2 ;;
     esac
@@ -71,12 +71,32 @@ if (( no_audio && ! observe )); then
     exit 2
 fi
 
+# Reject an unknown scenario HERE, where it costs nothing.  Left to the
+# daemon it costs 60 seconds and answers with a message about a session
+# that "MAY have been created" and a warning not to retry -- alarming,
+# and about the wrong thing: nothing was created, the name was a typo.
+if [[ -n "$scenario" ]]; then
+    if ! compgen -G "$HERE/.jaato/profiles/*/$scenario.yaml" >/dev/null; then
+        {
+            echo "unknown scenario: $scenario"
+            echo "available:"
+            for f in "$HERE"/.jaato/profiles/*/*.yaml; do
+                [[ -e "$f" ]] || continue
+                name="$(basename "$f" .yaml)"
+                [[ "$name" == _* ]] && continue     # tier-1 bases are not scenarios
+                echo "  $name"
+            done | sort -u
+        } >&2
+        exit 2
+    fi
+fi
+
 # Both processes must agree on this before either starts.
 cascade_id="$($PYTHON -c 'import uuid; print(uuid.uuid4().hex)')" || exit 1
 
 driver_args=("$cascade_id")
 [[ -n "$prompt" ]]  && driver_args+=(--prompt "$prompt")
-[[ -n "$profile" ]] && driver_args+=(--profile "$profile")
+[[ -n "$scenario" ]] && driver_args+=(--scenario "$scenario")
 
 observer_pid=""
 cleanup() {

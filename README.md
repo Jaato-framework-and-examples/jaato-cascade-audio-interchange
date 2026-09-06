@@ -59,7 +59,13 @@ make.
 ./run.sh -o                               # driver + observer, plays it live
 ./run.sh -p "¿Por qué el mar es salado?"  # ask something else
 ./run.sh -o -q -p "Count to three."       # observe, trace without sound
+./run.sh -s duet                          # the two-tier scenario, below
 ```
+
+`-s` picks the **scenario** (`speaker`, the default, or `duet`); `-p`
+gives the question. An unknown scenario is refused immediately, listing
+the ones that exist — the profile file is on disk, so there is no reason
+to spend a 60-second daemon timeout discovering a typo.
 
 `PYTHON` overrides the interpreter (default `python3`, so an activated
 virtualenv is used as-is).
@@ -129,11 +135,11 @@ of them without restating either.
 
 ## Two scenarios
 
-**`speaker`** — one audio model answers out loud and closes the session.
-This is what the sections above describe.
+**`speaker`** (the default) — one audio model answers out loud and closes
+the session. This is what the sections above describe.
 
-**`duet`** — a cheap text model decides the answer and closes the
-session; an audio tier is entered only to say it. It is the shape a real
+**`duet`** (`./run.sh -s duet`) — a cheap text model decides the answer
+and closes the session; an audio tier is entered only to say it. It is the shape a real
 deployment usually wants, and it exists here because it exposes something
 the single-tier demo cannot.
 
