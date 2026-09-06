@@ -360,9 +360,23 @@ Both are fixed:
 Measured after: peak 1 concurrent player on a 31s narration, and nothing
 left running.
 
-`final=True` on the last media chunk would make the stream boundary
-explicit and remove the inference entirely — the field is in the contract
-and the framework never sets it for model speech.
+**`final` now arrives, so the inference is a backstop rather than the
+signal.** The framework never set it for model speech — but the upstream
+was sending the boundary all along. Captured from the wire, 20 frames:
+
+```
+15  audio keys=['data']        6400B   <- last audio bytes
+16  audio keys=['expires_at']     0B   <- END-OF-AUDIO marker
+19  [DONE]
+```
+
+Frame 16 is a `delta.audio` carrying neither bytes nor transcript, and
+the decoder returned None for exactly that shape — dropping the one
+frame that answers "was that the last chunk?". Fixed upstream: the last
+chunk of an utterance is now delivered with `final=True`, verified live.
+
+The stream-change and session-end rules above stay, for a provider that
+sends no marker, but they are no longer what this demo relies on.
 
 ---
 
