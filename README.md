@@ -9,13 +9,35 @@ with audio. `run_cascade.py` saves that audio as a WAV; `run_observer.py`
 — which never creates a session and never sends a message — plays the
 same bytes through PulseAudio as they arrive.
 
+```mermaid
+flowchart LR
+    subgraph driver ["run_cascade.py — first party"]
+        S["IPCClient.session(...)<br/>session.complete(prompt, on_media=…)"]
+        W["out/answer.wav"]
+        S --> W
+    end
+
+    subgraph obs ["run_observer.py — third party"]
+        C["cascade_events(cascade_id)"]
+        P["paplay"]
+        C --> P
+    end
+
+    D["jaato daemon"]
+    M["OpenRouter<br/>openai/gpt-audio-mini"]
+
+    S -- "creates the session" --> D
+    D -- "modalities: [text, audio]<br/>set by the tier's outbound role" --> M
+    M -- "audio deltas" --> D
+    D -- "ToolOutputEvent<br/>call_id=model-output<br/>mime_type · data_b64 · sequence · final" --> S
+    D -- "the same events, by cascade id" --> C
 ```
-run_cascade.py  ──create_session(profile="speaker")──▶  daemon ──▶ OpenRouter
-      ▲                                                   │        gpt-audio-mini
-      └── ToolOutputEvent(mime_type, data_b64, sequence) ◀─┤
-                                                           │
-run_observer.py ──cascade_events(cascade_id) ─────────────◀┘   ──▶ paplay
-```
+
+The driver **created** that session; the observer only knows its cascade
+id. Those are two different SDK surfaces — `session.complete(on_media=…)`
+for your own result, `cascade_events(...)` for someone else's — and the
+split between the two scripts follows that line, not a lifecycle-vs-data
+one.
 
 ## What it actually demonstrates
 
