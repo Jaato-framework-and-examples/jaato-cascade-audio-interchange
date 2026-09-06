@@ -70,6 +70,11 @@ to spend a 60-second daemon timeout discovering a typo.
 `PYTHON` overrides the interpreter (default `python3`, so an activated
 virtualenv is used as-is).
 
+With `-o` the observer's trace streams into the terminal as chunks
+arrive, and the wrapper waits for playback to finish before returning —
+it says so while it waits, because a 30-second answer means 30 seconds
+between the driver's last line and the shell prompt.
+
 `-o` exists because **ordering matters**: a one-stage run takes about
 seven seconds, less than a second Python process needs to boot, connect
 and register, so an observer started after the driver attaches to a

@@ -99,7 +99,12 @@ driver_args=("$cascade_id")
 [[ -n "$scenario" ]] && driver_args+=(--scenario "$scenario")
 
 observer_pid=""
+tail_pid=""
 cleanup() {
+    if [[ -n "$tail_pid" ]] && kill -0 "$tail_pid" 2>/dev/null; then
+        kill "$tail_pid" 2>/dev/null
+        tail_pid=""
+    fi
     if [[ -n "$observer_pid" ]] && kill -0 "$observer_pid" 2>/dev/null; then
         # SIGINT, not SIGTERM: the observer treats an interrupt as a
         # normal end, draining whatever audio is still buffered and
@@ -146,6 +151,13 @@ if (( observe )); then
         exit 1
     fi
     echo "observer attached; firing (listen now)"
+    # Follow the trace from here rather than dumping it at the end.  The
+    # log file exists so the attach handshake has something to grep; once
+    # attached, withholding the lines until cleanup means a run that is
+    # WORKING shows nothing for as long as the audio lasts, and then
+    # emits every chunk at once.  For a 24s answer that reads as a hang.
+    tail -n +1 -f "$observer_log" &
+    tail_pid=$!
 fi
 
 "$PYTHON" "$HERE/run_cascade.py" "${driver_args[@]}"
@@ -153,13 +165,27 @@ status=$?
 
 if (( observe )); then
     # Chunks are fed to paplay as they arrive, so the tail of the answer
-    # is still playing when the driver returns.  Let it finish before
-    # cleanup() interrupts the observer.
-    sleep 6
+    # is still playing when the driver returns.  Wait for the PLAYER to
+    # finish rather than for a fixed number of seconds: the old `sleep 6`
+    # was tuned to a three-second answer and silently truncated nothing
+    # only because it was followed by a 40s kill loop -- a 24s story sat
+    # there looking hung.  Bounded, because a wrapper that never returns
+    # is worse than one that reports a straggler.
+    if (( ! no_audio )); then
+        # One line, not a progress spinner: the observer's trace is
+        # streaming into this same terminal, and dots interleaved with it
+        # garble both.
+        announced=0
+        waited=0
+        while pgrep -P "$observer_pid" -x paplay >/dev/null 2>&1; do
+            (( announced )) || { echo "(still playing; waiting for the answer to finish)"; announced=1; }
+            sleep 1
+            waited=$(( waited + 1 ))
+            (( waited >= 300 )) && break
+        done
+    fi
     cleanup
     observer_pid=""
-    echo "--- observer ---"
-    cat "$observer_log"
 fi
 
 exit "$status"
