@@ -111,16 +111,61 @@ enough; the client just cannot parse it). See KNOWN_ISSUES.md #823.
 
 | Path | What it is |
 |------|-----------|
+| `run.sh` | Wrapper: runs the driver alone, or with the observer attached first |
 | `run_cascade.py` | Fires one stage, reassembles the audio, writes `out/answer.wav` |
 | `run_observer.py` | Attaches to a cascade id, traces events, hands speech to the player |
 | `pulse_playback.py` | PulseAudio playback for headerless PCM — knows nothing about jaato |
 | `.jaato/profiles/_base_speaker.yaml` | Tier-1 base: no plugins, completion gating, no provider bound |
 | `.jaato/profiles/openrouter_gpt_audio_mini/speaker.yaml` | Tier-2 set: binds OpenRouter + `openai/gpt-audio-mini`, declares the speaking tier |
-| `.jaato/agents/speaker.md` | The persona — answer in one spoken sentence |
+| `.jaato/agents/speaker.md` | The `speaker` persona — answer in one spoken sentence |
+| `.jaato/profiles/openrouter_gpt_audio_mini/duet.yaml` | The second scenario: a text planner plus a speaking tier |
+| `.jaato/agents/duet.md` | The `duet` persona — decide, delegate the speaking, complete |
 
 The base profile stays provider-agnostic on purpose: to try another
 audio model, add a sibling set directory and select it with
-`JAATO_PROFILE_SET`.
+`JAATO_PROFILE_SET`.  Both agents live in one set because they differ by
+SCENARIO, not by binding — a second provider set would then give you both
+of them without restating either.
+
+## Two scenarios
+
+**`speaker`** — one audio model answers out loud and closes the session.
+This is what the sections above describe.
+
+**`duet`** — a cheap text model decides the answer and closes the
+session; an audio tier is entered only to say it. It is the shape a real
+deployment usually wants, and it exists here because it exposes something
+the single-tier demo cannot.
+
+`enter_tier` is a MODE SWITCH, so returning from the speaking tier needs a
+deliberate act by the model in it — routinely the model LEAST able to
+perform one. Measured over four runs, the audio tier never handed back:
+it said its sentence and stopped, and the framework's completion nudge —
+a safety net for an agent that forgot to finish — was the only thing that
+ever unblocked the return. In one run the audio model closed the session
+itself, from the wrong tier, against its persona.
+
+The executor tier therefore declares `exit_on: completion`: the framework
+enters it, lets it do one completion, returns to the planner, and reports
+what the delegate produced. The speaking model does nothing to hand back.
+After that change the nudge disappears from every run:
+
+```
+before:  enter_tier(executor) → NUDGE → enter_tier(planner) → signal_completion
+after:   enter_tier(executor) → [delegation report] → signal_completion
+```
+
+Returning the tier BINDING alone was not enough, and that is the
+interesting part: the delegate's completion settling is what ENDS the
+turn, so switching back handed the wheel to a tier with no turn to steer.
+Reporting the outcome is what returns control — through the ordinary
+mid-turn path, not through the nudge.
+
+> **`exit_on` needs a framework that has it.** An older one parses the
+> profile and ignores the key, so `duet` still runs — with the nudge, as
+> above. That is the symptom to expect if the delegation report never
+> appears in the trace; check for `TIER_EXIT_ARMED` in
+> `.jaato/logs/duet_trace.jsonl` before suspecting the profile.
 
 ## Known issues
 

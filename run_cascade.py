@@ -86,6 +86,10 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "-p", "--prompt", default=None,
         help="the question to ask (default: the first stage's own prompt)")
+    parser.add_argument(
+        "-P", "--profile", default=None,
+        help="profile (and agent) for the first stage — 'speaker' (one "
+             "audio model) or 'duet' (a text model delegating to one)")
     return parser.parse_args(argv)
 
 
@@ -197,6 +201,14 @@ async def main() -> int:
     # depends on what stage 1 produced -- so it is not the caller's to
     # set from a flag.
     worklist = list(WORKLIST)
+    # ``--profile`` names the stage's profile AND its agent: in this
+    # workspace they share a name by construction (speaker/speaker,
+    # duet/duet), because a stage's persona and its model binding are two
+    # halves of one scenario.  Selecting them separately would let a
+    # persona run against a profile it was not written for.
+    if args.profile:
+        _, _, prompt = worklist[0]
+        worklist[0] = (args.profile, args.profile, prompt)
     if args.prompt:
         profile, agent, _ = worklist[0]
         worklist[0] = (profile, agent, args.prompt)
