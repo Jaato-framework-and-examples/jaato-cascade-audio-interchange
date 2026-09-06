@@ -27,7 +27,8 @@ Contract, per the producer's spec:
   ``pw-metadata -m`` replays the current value on connect (confirmed by
   the producer against a fresh monitor with no writes).  Treating that
   replay as a transition fabricates a boundary at startup.
-* the signal arrives ~200 ms BEFORE the audio it describes, so a cut at
+* the signal arrives BEFORE the audio it describes -- by 250-840 ms
+  over the real link, bracketed by two real presses -- so a cut at
   the transition clips word endings.  :data:`TAIL_MS` carries past it.
 """
 from __future__ import annotations
@@ -54,18 +55,37 @@ BYTES_PER_SECOND = RATE * CHANNELS * WIDTH
 
 # parec's DEFAULT buffer is two seconds: measured against wraith_mic it
 # delivers nothing for 1.98s and then 40 blocks at once, so every
-# boundary lands on a 2s grid and a 250ms tail cannot be expressed.
+# boundary lands on a 2s grid and a sub-second tail cannot be expressed.
 # Asking for a latency makes the cadence ~43ms. No samples are lost
 # either way (4.05s of audio arrived in 4.0s wall with and without it);
 # this buys granularity, not data.
 LATENCY_MS = 50
 
-#: How far past `released` to keep capturing.  The transition arrives
-#: ~200 ms BEFORE the corresponding audio (measured by the producer on
-#: this host), so cutting at the transition truncates the last word.
-#: A measurement near 500 ms means a stale producer -- that was the
-#: figure before its ffmpeg head-buffering fix.
-TAIL_MS = 250
+#: How far past `released` to keep capturing.  This is not a cosmetic
+#: fade -- it is the PIPELINE LATENCY L.  The phone encodes, the link
+#: carries and ffmpeg decodes, so the audio for a moment arrives in the
+#: stream well after the key transition that announced it.  Cut at the
+#: release edge and the last word is gone: measured on the first real
+#: press through this path, a 250 ms tail left 0.010 s of trailing
+#: silence with the envelope still at full energy -- speech that did not
+#: decay but was severed.
+#:
+#: L is BOUNDED, not known.  Two independent real presses bracket it.
+#: Voiced audio was still at full energy 0.25 s past a release, and a
+#: human never keeps speaking after tapping off, so L > 0.25 s.  Another
+#: press put 0.837 s between the press signal and the first audio, and a
+#: human never starts speaking before tapping on, so L < 0.837 s.  An
+#: earlier reading of 1.32 s was the leading silence of a captured
+#: window, which is L PLUS the operator's reaction time -- an upper
+#: bound mistaken for a measurement, and excluded by the interval above.
+#:
+#: 2500 ms sits comfortably past that interval rather than near it,
+#: because L is a network path and will vary.  Verified on three real
+#: presses: each captured complete, with 2.24 s, 3.31 s and 3.41 s of
+#: trailing margin.  Over-shooting costs trailing silence, which a
+#: transcriber charges almost nothing for; under-shooting costs a
+#: truncated final word, which nothing recovers.
+TAIL_MS = 2500
 
 #: Refuse to grow the ring without bound.  A press that outruns this is
 #: a producer or operator fault, not something to absorb silently.
@@ -169,7 +189,7 @@ class PushToTalkMic:
         self._on_utterance = on_utterance
         self._source = source
         #: The tail is carried as BYTES, not seconds.  The source runs at
-        #: a fixed rate and never pauses, so "250ms after the release"
+        #: a fixed rate and never pauses, so "TAIL_MS after the release"
         #: is an arithmetic offset rather than a moment to wait for --
         #: which is what lets a late worker deliver an utterance whose
         #: bytes are still exactly right.
