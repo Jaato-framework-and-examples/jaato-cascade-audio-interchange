@@ -65,10 +65,15 @@ LATENCY_MS = 50
 #: fade -- it is the PIPELINE LATENCY L.  The phone encodes, the link
 #: carries and ffmpeg decodes, so the audio for a moment arrives in the
 #: stream well after the key transition that announced it.  Cut at the
-#: release edge and the last word is gone: measured on the first real
-#: press through this path, a 250 ms tail left 0.010 s of trailing
-#: silence with the envelope still at full energy -- speech that did not
-#: decay but was severed.
+#: release edge and audio is lost.  Measured on the first real press
+#: through this path, a 250 ms tail ended the window 0.010 s after the
+#: last voiced frame: the operator finished a sentence, paused, and had
+#: begun a further phrase, which the cut severed 130 ms in.  Energy at
+#: the final frame was 33 % of peak and RISING, so the window did not
+#: close on silence.  Transcription confirms the shape -- the captured
+#: part reads as a complete sentence, because what was lost was the
+#: phrase AFTER it rather than the middle of a word.  A coherent
+#: transcript is therefore no evidence that nothing was cut.
 #:
 #: L is BOUNDED, not known.  Two independent real presses bracket it.
 #: Voiced audio was still at full energy 0.25 s past a release, and a
