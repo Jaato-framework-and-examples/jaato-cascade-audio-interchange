@@ -245,9 +245,26 @@ model is not "unable to emit tool calls". It emitted `enter_tier` and
 **unprompted at the end of a spoken turn** — which is why the nudge
 rescues every run.
 
-The framework answer is a tier that is entered and exited automatically
-(`lifetime`), so the hand-back needs no cooperation from the model least
-able to give it. This profile is the test case for it.
+**Fixed upstream by `exit_on: completion`.** The executor tier now
+declares it, and the framework enters the tier, lets it do one
+completion, returns to the planner, and reports what the delegate
+produced as a mid-turn message. The model in the speaking tier does
+nothing to hand back. Same profile, measured after:
+
+```
+enter_tier(executor) -> [delegation report] -> signal_completion
+```
+
+The nudge is gone, and so is the model's manual `enter_tier(planner)`.
+
+Returning the tier BINDING alone was not enough and is worth recording:
+the delegate's completion settling is what ENDS the turn, so switching
+back handed the wheel to a tier with no turn to steer — the manual
+`enter_tier` disappeared but the nudge remained. Reporting the outcome
+is what returns control, through the mid-turn path the framework already
+has. It also closes a quieter hole: model media never enters history, so
+without the report the caller could only learn what was said when a
+transcript happened to arrive.
 
 ---
 

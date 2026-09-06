@@ -1,5 +1,13 @@
 name: duet
-inherits: [_base_duet]
+# Inherits the SPEAKER base, not a copy of it.  The stage contract is
+# identical -- no plugins, no base instructions, the same
+# completion_payload_schema -- and the only thing duet adds is a second
+# tier, which lives here.  A `_base_duet` did exist and was a verbatim
+# copy that had already lost two field descriptions; the reason given
+# for it (keeping the single-tier demo untouched) was not a reason,
+# since inheriting changes nothing in the parent.
+inherits: [_base_speaker]
+description: Text model answers and completes; an audio tier speaks the answer.
 plugins: []
 
 # Required at top level even though every tier declares both (#822).
@@ -17,7 +25,10 @@ model_tiers:
     model: openai/gpt-audio-mini
     provider: openrouter
     modalities: {audio: outbound}
-    description: 'says a sentence out loud; return to planner when done'
+    # Entered, speaks once, left again — without the audio model doing
+    # anything.  It never handed back on its own in four measured runs.
+    exit_on: completion
+    description: 'says a sentence out loud; you return automatically'
   initial: planner
   fallback: planner
 
