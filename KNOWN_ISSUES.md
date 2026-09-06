@@ -13,11 +13,13 @@ symptom knows why the code looks the way it does.
 | [#821][821] | `jaato-scaffold new observer` emits wire event-type values; the daemon filters on class names | **worked around** |
 | [#822][822] | Tiered profile without top-level `provider:` fails bootstrap | **worked around** |
 | [#823][823] | `jaato-doctor` doesn't detect client/daemon SDK checkout skew | superseded — see below |
+| [#827][827] | `jaato-scaffold new cascade` hand-rolls the stage loop and discards the payload | **fixed here by hand** |
 
 [820]: https://github.com/Jaato-framework-and-examples/jaato/issues/820
 [821]: https://github.com/Jaato-framework-and-examples/jaato/issues/821
 [822]: https://github.com/Jaato-framework-and-examples/jaato/issues/822
 [823]: https://github.com/Jaato-framework-and-examples/jaato/issues/823
+[827]: https://github.com/Jaato-framework-and-examples/jaato/issues/827
 
 ---
 
@@ -56,6 +58,27 @@ validates cleanly and cannot start a session.
 
 **Workaround:** `speaker.yaml` keeps top-level `model:` / `provider:`
 duplicating the tier, with a comment saying why they cannot be dropped.
+
+## #827 — the generated cascade driver discards its own payload
+
+`jaato-scaffold new cascade` emits the stage loop as `asyncio.Event` +
+`subscribe_once(SESSION_TERMINATED)` + `done.wait()`, returning the
+terminal *reason*. That is correct for knowing a gated stage ended, and
+tells you nothing about what it produced — so this workspace declared a
+`completion_payload_schema` with a `spoken` field and never read it,
+printing `natural` while the model's transcript sat unread in
+`AGENT_COMPLETED.payload`.
+
+**Fixed here by hand:** `run_cascade.py` uses `IPCClient.session(...)` +
+`session.complete(prompt, on_media=...)`, which returns the payload,
+raises `AgentError` on an error terminal, and settles when the session
+does rather than when its first turn ends (jaato #767 — this stage is
+routinely nudged, so a turn boundary would report success while the
+model still had a tool call to make). The driver lost 21 lines and all
+of its event-loop primitives.
+
+Revert to the generated shape when #827 lands, rather than keeping a
+local divergence.
 
 ## #823 — client and daemon can run different checkouts
 
