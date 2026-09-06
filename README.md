@@ -99,8 +99,12 @@ python run_observer.py $CID &
 python run_cascade.py  $CID --prompt "What makes a rainbow?"
 ```
 
-**It answers in the language you ask in** — the persona sets the form,
-not the language.
+**It usually answers in the language you ask in** — the persona sets the
+form, not the language. "Usually" is measured, not hedging: 3 of 4 runs
+of the same English prompt answered in English and one answered in
+Spanish. No cause found; the daemon's `LANG` was the obvious suspect and
+is a dead end, since the framework touches locale only for Windows
+console encoding and never the prompt.
 
 ### Preflight
 
@@ -151,13 +155,62 @@ of them without restating either.
 
 ## Two scenarios
 
-**`speaker`** (the default) — one audio model answers out loud and closes
-the session. This is what the sections above describe.
+Same question, same models, two shapes. Measured on
+`openai/gpt-audio-mini` (+ `gpt-4o-mini` as the planner):
 
-**`duet`** (`./run.sh -s duet`) — a cheap text model decides the answer
-and closes the session; an audio tier is entered only to say it. It is the shape a real
-deployment usually wants, and it exists here because it exposes something
-the single-tier demo cannot.
+| | `speaker` | `duet` |
+|---|---|---|
+| tiers | one | two: a text planner, an audio executor |
+| audio generations per answer | **2** (the nudge fires) | **1** |
+| completion nudge | fires ~every run | never |
+| `spoken` payload | describes the nudge, not the answer | matches what was said |
+| payload checked against history | no | yes, `completion_processors` |
+| demonstrates | outbound media, minimally | how the framework makes a hand-off reliable |
+
+Use `speaker` to see the smallest possible outbound-audio client. Use
+`duet` for anything you intend to build on.
+
+### `speaker` — the minimal one, and the one that misbehaves
+
+`./run.sh` (the default). One audio model answers out loud and closes the
+session. It is the smallest thing that demonstrates outbound media, which
+is why it is the default and why the sections above describe it.
+
+It is also the weaker demo, and the weakness is worth understanding
+before you read anything into a run:
+
+**The completion nudge fires almost every time** — 4 of 4 in the last
+measured batch. `openai/gpt-audio-mini` does not emit a native tool call
+unprompted at the end of a spoken turn: it says its sentence and stops,
+and the framework's nudge is what gets it to call `signal_completion`.
+So a `speaker` stage normally costs **two** billed audio generations, not
+one. This is a model trait, not a framework fault, and `speaker` has no
+way around it — a single tier has nowhere to hand off to.
+
+**Which makes its completion payload untrustworthy.** The driver prints
+`payload["spoken"]`, the model's own transcript of what it said. On a
+nudged turn the model routinely fills that field describing the NUDGE
+instead of its answer:
+
+```
+[user ] 'In one short sentence, what colour is the sky?'
+[model] 'Lo cielo normalmente es azul cuando está despejado.'   <- what was SAID
+[user ] 'Your session is about to end without calling signal_completion…'
+[model] CALL signal_completion({"spoken": "Cualquier cosa más en la que
+                                pueda ayudarte, o puedo finalizar ahora
+                                la sesión, gracias."})           <- what was REPORTED
+```
+
+The audio is right; the payload is not. Trust `out/answer.wav` over the
+printed line for this scenario, or use `duet`.
+
+### `duet` — two tiers, and the one that behaves
+
+`./run.sh -s duet`. A cheap text model decides the answer and closes the
+session; an audio tier is entered only to say it. It is the shape a real
+deployment usually wants — you rarely want your reasoning model and your
+voice to be the same model — and it is where the framework's answer to
+the problems above actually shows.
 
 `enter_tier` is a MODE SWITCH, so returning from the speaking tier needs a
 deliberate act by the model in it — routinely the model LEAST able to
