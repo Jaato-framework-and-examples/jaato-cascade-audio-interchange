@@ -14,6 +14,7 @@
 #   ./run.sh -o                               driver + live audio
 #   ./run.sh -p "Why is the sea salty?"       ask something else
 #   ./run.sh -o -q -p "Count to three."       observe, trace without sound
+#   ./run.sh --socket /tmp/other.sock         a daemon listening elsewhere
 #   ./run.sh -s duet                          two tiers: a text model
 #                                             decides and completes, an
 #                                             audio tier only speaks
@@ -23,6 +24,10 @@
 #   duet     a text planner delegates the speaking to an audio tier that
 #            is entered and exited automatically (exit_on: completion),
 #            so the audio model never has to hand back.
+#
+# The daemon defaults to the SDK's own default socket, so this works
+# against a stock jaato-server with no configuration.  --socket (or
+# JAATO_IPC_SOCKET) points it elsewhere.
 #
 # PYTHON overrides the interpreter (default: python3, so an activated
 # virtualenv is used as-is).  The daemon must speak protocol >= 1.4; the
@@ -56,6 +61,10 @@ while [[ $# -gt 0 ]]; do
             [[ $# -ge 2 ]] || { echo "--prompt needs a question" >&2; exit 2; }
             prompt="$2"; shift 2 ;;
         -p=*|--prompt=*) prompt="${1#*=}"; shift ;;
+        --socket)
+            [[ $# -ge 2 ]] || { echo "--socket needs a path" >&2; exit 2; }
+            export JAATO_IPC_SOCKET="$2"; shift 2 ;;
+        --socket=*) export JAATO_IPC_SOCKET="${1#*=}"; shift ;;
         -s|--scenario)
             [[ $# -ge 2 ]] || { echo "--scenario needs a name" >&2; exit 2; }
             scenario="$2"; shift 2 ;;

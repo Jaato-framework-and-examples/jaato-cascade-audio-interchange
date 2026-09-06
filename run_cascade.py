@@ -30,10 +30,12 @@ Preflight:
 import argparse
 import asyncio
 import base64
+import os
 import sys
 import uuid
 from pathlib import Path
 
+from jaato_sdk.client.ipc import DEFAULT_SOCKET_PATH
 from jaato_sdk import ClientType, IPCClient, SessionCreateFailed
 from jaato_sdk.client.convenience import AgentError
 
@@ -43,10 +45,17 @@ HERE = Path(__file__).resolve().parent
 ENV_FILE = str(HERE / ".env")
 WORKSPACE = str(HERE)
 
-#: The daemon carrying the media-delivery code.  NOT the default
-#: /tmp/jaato.sock — a daemon without that branch accepts the profile and
-#: then silently delivers no audio, which looks like a model problem.
-SOCKET = "/tmp/jaato-audio.sock"
+#: The daemon to talk to.  Defaults to the SDK's own default, so this
+#: example works against a stock `jaato-server` with no configuration --
+#: and stays correct on Windows, where the default is a named pipe and
+#: any hardcoded "/tmp/..." would be wrong.
+#:
+#: Override with JAATO_IPC_SOCKET (or `run.sh --socket`) when the daemon
+#: listens elsewhere -- a second daemon for development, a per-user
+#: socket, a container path.  This file used to hardcode the authors'
+#: own test socket, which is exactly the kind of local detail an example
+#: must not carry.
+SOCKET = os.environ.get("JAATO_IPC_SOCKET") or DEFAULT_SOCKET_PATH
 
 #: Where the cascade id is published for `run_observer.py`.  A file
 #: rather than an import: the two scripts share an id, not a module, so

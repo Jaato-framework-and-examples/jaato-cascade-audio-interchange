@@ -31,9 +31,11 @@ Preflight:
 """
 import asyncio
 import base64
+import os
 import sys
 from pathlib import Path
 
+from jaato_sdk.client.ipc import DEFAULT_SOCKET_PATH
 from jaato_sdk import (MODEL_MEDIA_CALL_ID, ClientType, EventType,
                        IPCClient)
 from jaato_sdk.events import ToolOutputEvent
@@ -44,9 +46,20 @@ HERE = Path(__file__).resolve().parent
 ENV_FILE = str(HERE / ".env")
 WORKSPACE = str(HERE)
 
-#: Must be the daemon the driver used — a cascade id means nothing to
-#: any other daemon.
-SOCKET = "/tmp/jaato-audio.sock"
+#: The daemon to talk to.  Defaults to the SDK's own default, so this
+#: example works against a stock `jaato-server` with no configuration --
+#: and stays correct on Windows, where the default is a named pipe and
+#: any hardcoded "/tmp/..." would be wrong.
+#:
+#: Override with JAATO_IPC_SOCKET (or `run.sh --socket`) when the daemon
+#: listens elsewhere -- a second daemon for development, a per-user
+#: socket, a container path.  This file used to hardcode the authors'
+#: own test socket, which is exactly the kind of local detail an example
+#: must not carry.
+SOCKET = os.environ.get("JAATO_IPC_SOCKET") or DEFAULT_SOCKET_PATH
+#:
+#: It must be the SAME daemon the driver used: a cascade id means
+#: nothing to any other one.
 
 CASCADE_ID_FILE = HERE / ".jaato" / "last_cascade_id"
 

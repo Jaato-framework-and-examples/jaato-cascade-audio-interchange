@@ -70,6 +70,13 @@ to spend a 60-second daemon timeout discovering a typo.
 `PYTHON` overrides the interpreter (default `python3`, so an activated
 virtualenv is used as-is).
 
+The daemon defaults to the SDK's own default socket, so this runs against
+a stock `jaato-server` with nothing to configure. Point it elsewhere with
+`--socket /path/to.sock` or `JAATO_IPC_SOCKET` — a second daemon for
+development, a per-user socket, a container path. Nothing here hardcodes
+a path, which also keeps it correct on Windows, where the default is a
+named pipe rather than a file.
+
 With `-o` the observer's trace streams into the terminal as chunks
 arrive, and the wrapper waits for playback to finish before returning —
 it says so while it waits, because a 30-second answer means 30 seconds
