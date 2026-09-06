@@ -212,6 +212,43 @@ runs ~10s instead of ~3 because the second turn speaks as well. Reading
 the payload is still right — it is the schema's whole purpose — but on
 this model its value is only trustworthy on a single-generation run.
 
+## The two-tier hand-off depends on the completion nudge
+
+`.jaato/profiles/openrouter_gpt_audio_mini/duet.yaml` is the reproduction
+case for this, kept because it is the shape a real deployment wants: a
+cheap text model decides the answer and closes the session, an audio tier
+only says it out loud.
+
+It runs, and the tier swap works in both directions. But the audio tier
+never hands back on its own. Four runs, every one:
+
+```
+122955: enter_tier(executor) -> **NUDGE** -> enter_tier(planner) -> signal_completion
+123040: enter_tier(planner) -> enter_tier(executor) -> **NUDGE** -> signal_completion
+123050: enter_tier(planner) -> enter_tier(executor) -> **NUDGE** -> enter_tier(planner) -> signal_completion
+123103: enter_tier(planner) -> enter_tier(executor) -> **NUDGE** -> enter_tier(planner) -> signal_completion
+```
+
+The audio model speaks and stops. The return trip happens only because
+the framework's completion nudge prods it — a safety net doing structural
+work it was never designed for. A profile that is not completion-gated,
+or one that spends its nudge budget, stalls in the audio tier.
+
+In run `123040` the audio model called `signal_completion` **itself**,
+from inside the executor tier, never returning to the planner and against
+the persona's explicit instruction. So *which* model closes the session is
+not deterministic either.
+
+Worth stating precisely, because the earlier note here overstated it: this
+model is not "unable to emit tool calls". It emitted `enter_tier` and
+`signal_completion` correctly. What it does not do is emit a tool call
+**unprompted at the end of a spoken turn** — which is why the nudge
+rescues every run.
+
+The framework answer is a tier that is entered and exited automatically
+(`lifetime`), so the hand-back needs no cooperation from the model least
+able to give it. This profile is the test case for it.
+
 ---
 
 # Fixed upstream while building this

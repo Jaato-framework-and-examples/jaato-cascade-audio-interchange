@@ -1,0 +1,40 @@
+name: duet
+inherits: [_base_duet]
+plugins: []
+
+# Required at top level even though every tier declares both (#822).
+model: openai/gpt-4o-mini
+provider: openrouter
+
+model_tiers:
+  # The session STARTS here: a text model, no outbound role.
+  planner:
+    model: openai/gpt-4o-mini
+    provider: openrouter
+    description: 'decides the answer and closes the session; cannot speak'
+  # Entered only to say the answer out loud.
+  executor:
+    model: openai/gpt-audio-mini
+    provider: openrouter
+    modalities: {audio: outbound}
+    description: 'says a sentence out loud; return to planner when done'
+  initial: planner
+  fallback: planner
+
+trace:
+  provider_log: .jaato/logs/duet_trace.jsonl
+
+env:
+  JAATO_OPENROUTER_API_KEY: "pass://jaato/openrouter/api-key"
+
+plugin_configs:
+  openrouter:
+    api_key: "${JAATO_OPENROUTER_API_KEY}"
+    framework_overrides:
+      # Provider-WIDE assertion, though only the executor's model can
+      # actually emit audio — one of the things this experiment tests.
+      output_modalities: [text, audio]
+    api_params:
+      audio:
+        voice: alloy
+        format: pcm16
