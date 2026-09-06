@@ -61,6 +61,7 @@ make.
 ./run.sh -o -q -p "Count to three."       # observe, trace without sound
 ./run.sh -s duet                          # the two-tier scenario, below
 ./run.sh --socket /tmp/other.sock         # a daemon listening elsewhere
+./run.sh --help                           # every flag, from the script itself
 ```
 
 `-s` picks the **scenario** (`speaker`, the default, or `duet`); `-p`
