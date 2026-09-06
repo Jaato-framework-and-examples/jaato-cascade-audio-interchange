@@ -14,12 +14,16 @@ symptom knows why the code looks the way it does.
 | [#822][822] | Tiered profile without top-level `provider:` fails bootstrap | **worked around** |
 | [#823][823] | `jaato-doctor` doesn't detect client/daemon SDK checkout skew | superseded — see below |
 | [#827][827] | `jaato-scaffold new cascade` hand-rolls the stage loop and discards the payload | **fixed here by hand** |
+| [#829][829] | `_openai_compat` sends every `inline_data` part as `image_url`, defaulting the mime to `image/png` | not hit here (no attachments sent) |
+| [#830][830] | No path from audio bytes to a model — the framework can speak but not be spoken to | **blocks the inbound half** |
 
 [820]: https://github.com/Jaato-framework-and-examples/jaato/issues/820
 [821]: https://github.com/Jaato-framework-and-examples/jaato/issues/821
 [822]: https://github.com/Jaato-framework-and-examples/jaato/issues/822
 [823]: https://github.com/Jaato-framework-and-examples/jaato/issues/823
 [827]: https://github.com/Jaato-framework-and-examples/jaato/issues/827
+[829]: https://github.com/Jaato-framework-and-examples/jaato/issues/829
+[830]: https://github.com/Jaato-framework-and-examples/jaato/issues/830
 
 ---
 
@@ -127,6 +131,27 @@ attribute 'split'` — meaning the gate had never once produced its
 intended message. Fixed upstream on the media branch.
 
 ---
+
+## #830 — the inbound half has nowhere to deliver
+
+`ptt_capture.py` produces utterances; nothing in the framework accepts
+them. `input_audio` appears nowhere in the tree, so an `audio/*` part on
+a user message is dropped by `openrouter` (its converter returns `None`
+for a mime the wire does not carry) or, on the `_openai_compat`
+providers, sent as a mislabelled image (#829). A transcription-only
+model is not reachable either: `microsoft/mai-transcribe-2` is served on
+`/api/v1/audio/transcriptions`, not chat-completions, and every provider
+kind in the tree is a chat provider.
+
+The audio itself is fine — a captured utterance transcribes correctly
+end to end ("Esto es una nueva prueba." from a phone, through an SSH
+link, ffmpeg, a PipeWire pipe-source and the segmenter). It is purely
+that the framework has no ears.
+
+**Workaround, when the loop is wired:** transcribe outside the framework
+and send text. That is what #830 exists to remove, so it is deliberately
+NOT done in this repo yet — a demo whose whole point is what the
+framework does should not quietly do the interesting part itself.
 
 # Open questions (not yet filed)
 

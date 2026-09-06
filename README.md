@@ -162,6 +162,7 @@ enough; the client just cannot parse it). See KNOWN_ISSUES.md #823.
 | `run_observer.py` | Attaches to a cascade id, traces events, hands speech to the player |
 | `pulse_playback.py` | PulseAudio playback for headerless PCM — knows nothing about jaato |
 | `speech_collector.py` | Reassembles chunks into a WAV — likewise knows nothing about jaato |
+| `ptt_capture.py` | The INBOUND half: cuts a push-to-talk microphone into utterances. Knows nothing about jaato, and nothing consumes it yet — see below |
 | `.jaato/profiles/_base_speaker.yaml` | Tier-1 base: no plugins, completion gating, no provider bound |
 | `.jaato/profiles/openrouter_gpt_audio_mini/speaker.yaml` | Tier-2 set: binds OpenRouter + `openai/gpt-audio-mini`, declares the speaking tier |
 | `.jaato/agents/speaker.md` | The `speaker` persona — answer in one spoken sentence |
@@ -174,6 +175,40 @@ audio model, add a sibling set directory and select it with
 `JAATO_PROFILE_SET`.  Both agents live in one set because they differ by
 SCENARIO, not by binding — a second provider set would then give you both
 of them without restating either.
+
+## The inbound half, and why it is not wired up
+
+Everything above is the framework speaking. `ptt_capture.py` is the
+other direction — a person speaking to it — and it stops one step short
+of the session on purpose.
+
+It reads a PipeWire/PulseAudio source continuously and cuts it into
+utterances using an **out-of-band** press signal (a `pw-metadata` key),
+never by inferring boundaries from the audio. Silence during a press is
+identical in the samples to silence between presses, so no level
+detector can tell "still listening" from "done" — the same lesson the
+outbound half learned when every attempt to infer where a stream ended
+closed a player mid-utterance.
+
+It is exercised against real hardware, and the numbers in it were
+measured rather than assumed:
+
+| What | Measured |
+|------|----------|
+| `parec` default buffer | **2 seconds** — first read at t=1.977s, then 40 blocks at once. Every boundary lands on a 2s grid unless `--latency-msec` is set. |
+| Pipeline latency `L` | bounded to **250–840 ms** by two real presses; the tail is 2500 ms to sit past it, not near it |
+| Press-key semantics | a **level**, not an event stream — the connect dump is sometimes delivered twice |
+
+**What is missing is the framework, not this file.** There is no path
+from audio bytes to a model ([#830][830]): `input_audio` appears nowhere
+in the tree, and a transcription-only model such as
+`microsoft/mai-transcribe-2` is served on a different endpoint from
+chat-completions, so it is not a provider in the sense the framework
+means. Wiring the loop today means transcribing outside the framework
+and sending the text — which works, and which is exactly the shape #830
+exists to remove.
+
+[830]: https://github.com/Jaato-framework-and-examples/jaato/issues/830
 
 ## Two scenarios
 
