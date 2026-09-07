@@ -1,0 +1,12 @@
+name: lineadirecta
+base_url: http://127.0.0.1:${JAATO_HELPDESK_PORT}
+title: Línea Directa — sistemas de atención al cliente (SIMULADO)
+version: '1.0'
+description: >
+  Los dos sistemas que un operador toca durante una llamada: buscar la
+  póliza del cliente y abrir un expediente de siniestro.  SIMULADO —
+  lo sirve `mock_helpdesk.py` con datos inventados; no hay ninguna
+  conexión con la compañía real.
+timeout: 5000
+default_headers:
+  Accept: application/json

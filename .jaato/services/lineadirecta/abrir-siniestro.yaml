@@ -1,0 +1,52 @@
+method: POST
+path: /v1/siniestros
+summary: Abrir un expediente de siniestro
+description: >
+  Registra el parte y devuelve el número de expediente que se le da al
+  cliente.  Se llama UNA vez, cuando ya se han tomado los datos: el
+  expediente que devuelve es el que el cliente apunta.
+request_body:
+  required: true
+  content:
+    application/json:
+      schema:
+        type: object
+        required: [poliza, fecha, lugar, descripcion]
+        properties:
+          poliza:
+            type: string
+            description: Número de póliza localizado con buscar-poliza
+          fecha:
+            type: string
+            description: Fecha y hora del hecho, tal como la dice el cliente
+          lugar:
+            type: string
+            description: Lugar exacto
+          descripcion:
+            type: string
+            description: Qué ocurrió, en una o dos frases
+          heridos:
+            type: boolean
+            description: Si hubo heridos
+          contrario_matricula:
+            type: string
+          contrario_aseguradora:
+            type: string
+          parte_amistoso:
+            type: boolean
+            description: Si se firmó declaración amistosa
+responses:
+  '200':
+    description: Expediente abierto
+    schema:
+      type: object
+      properties:
+        expediente:
+          type: string
+          description: Número de expediente (formato EXP-AAAA-NNNNNN)
+        poliza: {type: string}
+        estado: {type: string}
+        perito_asignado: {type: boolean}
+        proximo_paso: {type: string}
+  '404':
+    description: La póliza no existe

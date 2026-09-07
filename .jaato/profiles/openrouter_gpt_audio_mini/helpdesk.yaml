@@ -1,0 +1,82 @@
+name: helpdesk
+# `voice` plus the systems an operator actually touches.
+#
+# Inherits `_base_voice` for the same reason `voice` does: no completion
+# schema, so the session survives the whole call.  What it adds is the
+# service connector, because a helpdesk that cannot look anything up
+# answers every question with "no puedo consultarlo desde aqui", which
+# demonstrates nothing.
+inherits: [_base_voice]
+description: A simulated insurance helpdesk that can find your policy and open a claim.
+# ONE tool, eagerly.  `mode:preload` puts it in the initial schema so a
+# spoken turn never spends a round trip on `list_tools`; `tools:[...]`
+# drops the plugin's other eight from the wire body AND the grammar
+# surface, which matters here for a reason it would not in a text agent:
+# every tool in the schema is a name this model might read out loud.
+plugins:
+  - "service_connector(mode:preload, tools:[call_service])"
+
+# Required at top level even though the tier declares both (#822).
+model: openai/gpt-audio-mini
+provider: openrouter
+
+model_tiers:
+  # One tier that both HEARS and SPEAKS.  `bidirectional` is not two
+  # roles bolted together: outbound makes the daemon ask for
+  # `modalities: [text, audio]` on the request, inbound is what lets an
+  # `audio/*` attachment reach the wire as an `input_audio` block
+  # instead of being withheld (#830).  Declaring only `outbound` here
+  # would leave the model speaking into a room it cannot hear.
+  #
+  # Named `voice`, not `executor`.  Tier names stopped being a closed
+  # set in #831: a deployment names its own, subject to
+  # `^[a-z][a-z0-9_]{1,31}$`, and a free name MUST carry a `description`
+  # because that is what a canonical name gets for free.  `executor`
+  # would have been this tier's name under the old rule purely because
+  # it was "the one doing the work" — which said nothing about what it
+  # does.  The four canonical names still carry framework meaning;
+  # `vision` alone implies a modality role, so this tier states its own.
+  voice:
+    model: openai/gpt-audio-mini
+    provider: openrouter
+    modalities: {audio: bidirectional}
+    description: 'hears the question as audio and answers out loud'
+  initial: voice
+  fallback: voice
+
+env:
+  JAATO_OPENROUTER_API_KEY: pass://jaato/openrouter/api-key
+  # Where `mock_helpdesk.py` listens.  `_service.yaml` interpolates it
+  # into the base_url, so the catalog carries no port of its own.
+  JAATO_HELPDESK_PORT: '8731'
+
+plugin_configs:
+  # `call_service` is gated, and this driver answers no permission
+  # prompts -- a spoken call has nowhere to show one and nobody to click
+  # it.  Unanswered, the turn simply stops: the session went quiet with
+  # no error and the script exited having spoken two turns of four.
+  #
+  # Whitelisted rather than `defaultPolicy: allow`, so this grants
+  # exactly the one tool the profile exposes and nothing it might gain
+  # later.
+  permission:
+    policy:
+      defaultPolicy: deny
+      whitelist:
+        tools:
+        - call_service
+
+  openrouter:
+    api_key: "${JAATO_OPENROUTER_API_KEY}"
+    framework_overrides:
+      # ASSERTS what the model can emit.  No catalog in the tree reports
+      # output modalities, so without this the floor stays text-only and
+      # the tier's outbound role is refused at startup — which is exactly
+      # how this profile failed the first time it ran.
+      output_modalities: [text, audio]
+    api_params:
+      # NO temperature — see speaker.yaml: 0.0 makes this model loop
+      # catastrophically (818s of speech for a one-sentence answer).
+      audio:
+        voice: alloy
+        format: pcm16

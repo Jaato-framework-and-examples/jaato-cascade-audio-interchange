@@ -165,6 +165,8 @@ enough; the client just cannot parse it). See KNOWN_ISSUES.md #823.
 | `ptt_capture.py` | Cuts a push-to-talk microphone into utterances — knows nothing about jaato |
 | `run_voice.py` | The INBOUND driver: an utterance goes up as an attachment, the answer comes back as speech |
 | `.jaato/agents/helpdesk.md` | Esteban — a simulated insurance helpdesk that opens the call |
+| `mock_helpdesk.py` | The policy/claim systems, simulated — stdlib, no dependencies |
+| `.jaato/services/lineadirecta/` | Their service catalog, as the model sees it |
 | `.jaato/profiles/openrouter_gpt_audio_mini/listener.yaml` | Audio IN, text OUT — the instrument for checking what was said |
 | `.jaato/profiles/_base_speaker.yaml` | Tier-1 base: no plugins, completion gating, no provider bound |
 | `.jaato/profiles/openrouter_gpt_audio_mini/speaker.yaml` | Tier-2 set: binds OpenRouter + `openai/gpt-audio-mini`, declares the speaking tier |
@@ -264,6 +266,64 @@ than read aloud — see below for how.
 It is a SIMULATION and the persona says so: no policy data, no records,
 and an explicit instruction not to invent a policy number, because an
 invented one sounds exactly like a real one.
+
+### The systems behind the call
+
+An agent that cannot look anything up is not a helpdesk. Without a
+backend every call ended the same way — «no puedo consultarlo desde
+aquí» — which demonstrates a broken helpdesk rather than a working one.
+
+`mock_helpdesk.py` supplies the two systems an operator actually
+touches, and `.jaato/services/lineadirecta/` describes them so the model
+can call them:
+
+| Operation | What it does |
+|-----------|--------------|
+| `buscar-poliza` | `GET /v1/polizas?poliza=…` or `?dni=…` — either key locates the customer |
+| `abrir-siniestro` | `POST /v1/siniestros` — registers the parte, returns the expediente number |
+
+```
+python mock_helpdesk.py &                                   # port 8731
+python run_voice.py --profile helpdesk --agent helpdesk --greet
+```
+
+The mock prints the demo policies at startup; say one of those numbers
+on the phone and the agent finds it. Say anything else and it correctly
+reports not finding it — which is worth showing too, since an operator
+who "finds" every policy is not demonstrating a lookup.
+
+**Numbers arrive by voice, so the lookup compares loosely.** A policy
+number read aloud and typed back by a model comes with the spaces and
+pauses it heard: `LD 2026 004417` and `ld.2026.004417` both resolve.
+That is not laxity — it is the difference between a demo that works when
+spoken and one that only works when pasted.
+
+**One tool, eagerly, and nothing else:**
+
+```yaml
+plugins:
+  - "service_connector(mode:preload, tools:[call_service])"
+```
+
+`mode:preload` puts it in the initial schema so a spoken turn never
+spends a round trip discovering tools; `tools:[…]` drops the plugin's
+other eight from the wire body *and* the grammar surface — which matters
+here for a reason it would not in a text agent, since every tool in the
+schema is a name this model might read out loud.
+
+**`call_service` is gated, and a voice call cannot answer a permission
+prompt** — there is nowhere to show one and nobody to click it. Left
+unanswered the turn simply stops: the session went quiet with no error
+and the run spoke two turns of four. The profile therefore whitelists
+that one tool rather than opening the default policy:
+
+```yaml
+permission:
+  policy:
+    defaultPolicy: deny
+    whitelist:
+      tools: [call_service]
+```
 
 ### Where the domain knowledge lives, and where it should live
 

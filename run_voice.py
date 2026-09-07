@@ -37,6 +37,10 @@ Usage:
   python run_voice.py            # talk until Ctrl-C
   python run_voice.py --once     # one utterance, then exit
 
+  # the helpdesk, with its simulated systems -- start the mock first:
+  python mock_helpdesk.py &
+  python run_voice.py --profile helpdesk --agent helpdesk --greet
+
 Preflight:
   jaato-doctor --workspace . --env-file .env
   pactl list sources short | grep wraith_mic
@@ -154,6 +158,9 @@ async def main() -> int:
         description="Speak to the agent; it speaks back.")
     parser.add_argument("--once", action="store_true",
                         help="handle one utterance and exit")
+    parser.add_argument("--profile", default="voice",
+                        help="profile to run (default: voice; `helpdesk` "
+                             "adds the simulated policy/claim systems)")
     parser.add_argument("-a", "--agent", default="voice",
                         help="persona to answer with (default: voice; "
                              "`helpdesk` is Esteban, who opens the call)")
@@ -195,7 +202,7 @@ async def main() -> int:
                 client_type=ClientType.API,   # keeps signal_completion
                 min_protocol_version=MEDIA_PROTOCOL,
                 connect_timeout=120.0,
-                profile="voice",
+                profile=args.profile,
                 agent=args.agent,
         ) as session:
             # The agent answers the phone.  This happens BEFORE the mic

@@ -1,0 +1,36 @@
+method: GET
+path: /v1/polizas
+summary: Localizar la póliza del cliente
+description: >
+  Busca por número de póliza O por DNI.  Basta uno de los dos: si el
+  cliente no recuerda el número, el DNI lo localiza igual.  Devuelve el
+  titular, el vehículo y la cobertura contratada.
+parameters:
+- name: poliza
+  in: query
+  type: string
+  required: false
+  description: Número de póliza (formato LD-AAAA-NNNNNN)
+- name: dni
+  in: query
+  type: string
+  required: false
+  description: DNI o NIE del tomador (8 dígitos y letra)
+responses:
+  '200':
+    description: Póliza localizada
+    schema:
+      type: object
+      properties:
+        poliza: {type: string}
+        titular: {type: string}
+        dni: {type: string}
+        matricula: {type: string}
+        vehiculo: {type: string}
+        cobertura:
+          type: string
+          description: terceros | terceros_ampliado | todo_riesgo
+        franquicia: {type: number}
+        alta: {type: string, format: date}
+  '404':
+    description: No hay ninguna póliza con esos datos
