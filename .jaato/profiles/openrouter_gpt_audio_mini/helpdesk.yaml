@@ -62,7 +62,17 @@ model_tiers:
   # and control returns -- without the entered model having to hand
   # back, which the audio tier never did unprompted in four measured
   # runs of `duet`.
-  planner:
+  #
+  # Named `systems`, not `planner`.  Tier names are free since #831, and
+  # `planner` is one of the four CANONICAL names -- it carries the
+  # framework's own meaning, "decides the answer and closes the
+  # session", which is the opposite of this tier's job: it decides
+  # nothing and must hand speech back.  A canonical name would have told
+  # the model something false in the `enter_tier` schema, which is
+  # exactly where it is deciding where to go.  `terminal` fit the
+  # call-centre metaphor better still, and collides with this
+  # codebase's own vocabulary for terminal events.
+  systems:
     model: openai/gpt-4o-mini
     provider: openrouter
     exit_on: completion

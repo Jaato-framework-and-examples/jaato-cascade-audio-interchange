@@ -40,8 +40,8 @@ flowchart TD
 
     subgraph session ["one jaato session — never completes, so the call survives"]
         V["<b>voice</b> tier · gpt-audio-mini<br/>modalities: {audio: bidirectional}<br/>hears · writes the data down · speaks"]
-        N["<b>planner</b> tier · gpt-4o-mini<br/>exit_on: completion<br/>calls the systems"]
-        V -- "enter_tier(planner)" --> N
+        N["<b>systems</b> tier · gpt-4o-mini<br/>exit_on: completion<br/>calls the systems"]
+        V -- "enter_tier(systems)" --> N
         N -- "enter_tier(voice)" --> V
     end
 
@@ -50,7 +50,7 @@ flowchart TD
     V -- "ToolOutputEvent<br/>call_id=model-output" --> S(["you hear the answer"])
 ```
 
-The audio tier is the only one the caller can hear, and the planner is
+The audio tier is the only one the caller can hear, and the `systems` tier is
 the only one that reliably calls a tool — so every turn crosses the
 boundary twice, and `exit_on: completion` is what brings control back
 without the entered model having to remember to hand it over.
@@ -125,7 +125,7 @@ Taking the helpdesk first, since it exercises the most:
 
 **A tier changes which MODEL is at the wheel, not which tools exist.**
 The tool schema is session-wide and sits in the prompt-cache prefix, so
-`voice` and `planner` see the same `call_service`. What the second tier
+`voice` and `systems` see the same `call_service`. What the second tier
 buys is a model that will actually call it: on one tier
 `gpt-audio-mini` looked a policy up correctly and then, asked to open
 the parte, *said* «voy a abrir el parte» and called nothing. Measured on
@@ -436,7 +436,7 @@ a weak tool-caller a strong one.
 
 ```yaml
 voice:    gpt-audio-mini   modalities: {audio: bidirectional}   # hears, speaks
-planner:  gpt-4o-mini      exit_on: completion                  # touches the systems
+systems:  gpt-4o-mini      exit_on: completion                  # touches the systems
 initial:  voice
 ```
 
