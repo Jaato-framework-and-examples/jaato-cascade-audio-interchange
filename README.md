@@ -279,24 +279,45 @@ enough; the client just cannot parse it). See KNOWN_ISSUES.md #823.
 
 ## Layout
 
+Grouped by what a file is for, since the repo now holds five scenarios.
+
+**The two drivers** — one per direction:
+
 | Path | What it is |
 |------|-----------|
-| `run.sh` | Wrapper: runs the driver alone, or with the observer attached first |
-| `run_cascade.py` | Fires one stage, reassembles the audio, writes `out/answer.wav` |
-| `run_observer.py` | Attaches to a cascade id, traces events, hands speech to the player |
-| `pulse_playback.py` | PulseAudio playback for headerless PCM — knows nothing about jaato |
-| `speech_collector.py` | Reassembles chunks into a WAV — likewise knows nothing about jaato |
-| `ptt_capture.py` | Cuts a push-to-talk microphone into utterances — knows nothing about jaato |
-| `run_voice.py` | The INBOUND driver: an utterance goes up as an attachment, the answer comes back as speech |
-| `.jaato/agents/helpdesk.md` | Esteban — a simulated insurance helpdesk that opens the call |
-| `mock_helpdesk.py` | The policy/claim systems, simulated — stdlib, no dependencies |
-| `.jaato/services/lineadirecta/` | Their service catalog, as the model sees it |
-| `.jaato/profiles/openrouter_gpt_audio_mini/listener.yaml` | Audio IN, text OUT — the instrument for checking what was said |
+| `run_voice.py` | You speak to it. Utterance up as an attachment, answer back as speech |
+| `run.sh` → `run_cascade.py` | You write to it. Fires a stage, saves `out/answer.wav` |
+| `run_observer.py` | A third party: attaches to a cascade id it was handed, never creates a session |
+
+**Framework-agnostic modules** — none of these import jaato:
+
+| Path | What it is |
+|------|-----------|
+| `ptt_capture.py` | Cuts a push-to-talk microphone into utterances, out of band |
+| `pulse_playback.py` | PulseAudio playback for headerless PCM |
+| `speech_collector.py` | Reassembles chunks into a WAV |
+| `mock_helpdesk.py` | The policy/claim systems, simulated — stdlib only |
+
+**The `helpdesk` scenario** — the one everything else builds toward:
+
+| Path | What it is |
+|------|-----------|
+| `.jaato/profiles/openrouter_gpt_audio_mini/helpdesk.yaml` | Two tiers: `voice` hears and speaks, `soporte` consults |
+| `.jaato/agents/helpdesk.md` | Esteban — who he is and how he runs a call |
+| `.jaato/knowledge/siniestro_intake.md` | What a claim intake requires — the domain, not the persona |
+| `.jaato/scripts/knowledge.py` | Pulls that file into the prompt at session prep |
+| `.jaato/services/lineadirecta/` | The service catalog, as the model sees it |
+
+**The four scenarios it is made of:**
+
+| Path | What it is |
+|------|-----------|
+| `.jaato/profiles/_base_voice.yaml` | `_base_speaker` minus the completion schema — so a conversation never ends itself |
+| `.jaato/profiles/openrouter_gpt_audio_mini/voice.yaml` + `.jaato/agents/voice.md` | Audio both ways, one tier |
+| `.jaato/profiles/openrouter_gpt_audio_mini/listener.yaml` + `.jaato/agents/listener.md` | Audio in, TEXT out — the instrument for checking what was said |
 | `.jaato/profiles/_base_speaker.yaml` | Tier-1 base: no plugins, completion gating, no provider bound |
-| `.jaato/profiles/openrouter_gpt_audio_mini/speaker.yaml` | Tier-2 set: binds OpenRouter + `openai/gpt-audio-mini`, declares the speaking tier |
-| `.jaato/agents/speaker.md` | The `speaker` persona — answer in one spoken sentence |
-| `.jaato/profiles/openrouter_gpt_audio_mini/duet.yaml` | The second scenario: a text planner plus a speaking tier |
-| `.jaato/agents/duet.md` | The `duet` persona — decide, delegate the speaking, complete |
+| `.jaato/profiles/openrouter_gpt_audio_mini/speaker.yaml` + `.jaato/agents/speaker.md` | One speaking tier, the minimal outbound demo |
+| `.jaato/profiles/openrouter_gpt_audio_mini/duet.yaml` + `.jaato/agents/duet.md` | A text planner plus a speaking tier |
 | `.jaato/scripts/processors/spoken_was_spoken.py` | Completion validator: refuses a `spoken` payload the session never delegated |
 
 The base profile stays provider-agnostic on purpose: to try another
@@ -324,8 +345,10 @@ The numbers in it were measured against real hardware, not assumed:
 | What | Measured |
 |------|----------|
 | `parec` default buffer | **2 seconds** — first read at t=1.977s, then 40 blocks at once. Every boundary lands on a 2s grid unless `--latency-msec` is set. |
-| Pipeline latency `L` | bounded to **250–840 ms** by two real presses; the tail is 2500 ms to sit past it, not near it |
+| Pipeline latency `L` | bounded to **250–840 ms** by two real presses; the tail is 1200 ms — past the ceiling, with 360 ms for jitter |
 | Press-key semantics | a **level**, not an event stream — the connect dump is sometimes delivered twice |
+| Time to first spoken word | **~3.55 s** of model latency, plus the tail — the tail is the only half this repo controls |
+| Silence inside an utterance | **40–59 %** of real captures, trimmed before sending — paid for twice otherwise, in tokens and in waiting |
 
 `run_voice.py` is the join, and it is deliberately thin: it attaches WAV
 bytes and reads speech back. It never mentions audio in either
@@ -440,12 +463,22 @@ soporte:  gpt-4o-mini      exit_on: completion                  # touches the sy
 initial:  voice
 ```
 
-The session starts in `voice`, not in `planner` as `duet` does, because
-here the INPUT is audio: a text planner cannot hear the caller, so it
-cannot be the tier the utterance arrives at. The audio tier therefore
-**writes down what it heard** before delegating — the planner reads, it
+The session starts in `voice`, unlike `duet` which starts in its text
+tier: here the INPUT is audio, and a text model cannot hear the caller,
+so it cannot be where the utterance arrives. The audio tier therefore
+**writes down what it heard** before delegating — `soporte` reads, it
 does not listen — and `exit_on: completion` returns control after one
 completion without the entered model having to hand back.
+
+The tier is called `soporte` and not `planner` for a reason worth
+copying: `planner` is one of the four CANONICAL names, so it carries
+the framework's own meaning — *decides the answer and closes the
+session* — which is the opposite of this tier's job. A tier's name and
+description are rendered verbatim into the `enter_tier` schema, so they
+are what the model reads while choosing where to go; a canonical name
+would have been telling it something false at that exact moment. Names
+have been free since #831, so it can be called what it is — in Spanish,
+like everything else the model reads here.
 
 Measured, same six-turn call, one tier versus two:
 
