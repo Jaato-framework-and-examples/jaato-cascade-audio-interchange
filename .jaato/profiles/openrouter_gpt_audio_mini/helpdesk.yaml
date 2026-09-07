@@ -20,6 +20,21 @@ plugins:
 model: openai/gpt-audio-mini
 provider: openrouter
 
+# TWO TIERS, because tools and speech want different models.
+#
+# A tier carries a model, a provider, modalities and an exit rule -- NOT
+# tools.  The tool schema is session-wide and sits in the prompt-cache
+# prefix, so both tiers see `call_service`; what a tier changes is WHICH
+# MODEL is at the wheel when the decision to call it is made.  That is
+# the whole point here: gpt-audio-mini called `buscar-poliza` correctly
+# and then, asked to open the parte, SAID "voy a abrir el parte" and
+# called nothing.  Announcing a tool instead of invoking it is this
+# model's documented weakness (see KNOWN_ISSUES), and no amount of
+# persona wording makes a weak tool-caller a strong one.
+#
+# The session STARTS in `voice` and not in `planner` as `duet` does,
+# because here the INPUT is audio: a text planner cannot hear the
+# caller, so it cannot be the tier the utterance arrives at.
 model_tiers:
   # One tier that both HEARS and SPEAKS.  `bidirectional` is not two
   # roles bolted together: outbound makes the daemon ask for
@@ -41,6 +56,17 @@ model_tiers:
     provider: openrouter
     modalities: {audio: bidirectional}
     description: 'hears the question as audio and answers out loud'
+  # Entered to touch the systems, and left again on its own.  A text
+  # model that is good at tool calls, doing the one thing the audio
+  # model is bad at.  `exit_on: completion` means ONE completion here
+  # and control returns -- without the entered model having to hand
+  # back, which the audio tier never did unprompted in four measured
+  # runs of `duet`.
+  planner:
+    model: openai/gpt-4o-mini
+    provider: openrouter
+    exit_on: completion
+    description: 'consults the policy systems and opens the parte; you return automatically'
   initial: voice
   fallback: voice
 
@@ -65,6 +91,10 @@ plugin_configs:
       whitelist:
         tools:
         - call_service
+        # The hand-off itself.  Whitelisted for the same reason: a
+        # spoken call cannot answer a prompt, and a denied `enter_tier`
+        # would strand the audio tier holding data it cannot act on.
+        - enter_tier
 
   openrouter:
     api_key: "${JAATO_OPENROUTER_API_KEY}"

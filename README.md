@@ -298,6 +298,38 @@ pauses it heard: `LD 2026 004417` and `ld.2026.004417` both resolve.
 That is not laxity — it is the difference between a demo that works when
 spoken and one that only works when pasted.
 
+**Two tiers, because tools and speech want different models.** A tier
+carries a model, provider, modalities and an exit rule — **not tools**.
+The tool schema is session-wide and sits in the prompt-cache prefix, so
+both tiers see `call_service`; what a tier changes is which MODEL is at
+the wheel when the decision to call it is made.
+
+That is the whole point here. On one tier, `gpt-audio-mini` called
+`buscar-poliza` correctly and then, asked to open the parte, *said*
+«voy a abrir el parte» and called nothing — announcing a tool instead of
+invoking it, which is its documented weakness. No persona wording makes
+a weak tool-caller a strong one.
+
+```yaml
+voice:    gpt-audio-mini   modalities: {audio: bidirectional}   # hears, speaks
+planner:  gpt-4o-mini      exit_on: completion                  # touches the systems
+initial:  voice
+```
+
+The session starts in `voice`, not in `planner` as `duet` does, because
+here the INPUT is audio: a text planner cannot hear the caller, so it
+cannot be the tier the utterance arrives at. The audio tier therefore
+**writes down what it heard** before delegating — the planner reads, it
+does not listen — and `exit_on: completion` returns control after one
+completion without the entered model having to hand back.
+
+Measured, same six-turn call, one tier versus two:
+
+| | one tier | two tiers |
+|---|---|---|
+| `GET /v1/polizas` | 200 | 200 |
+| `POST /v1/siniestros` | **never called** | 200 |
+
 **One tool, eagerly, and nothing else:**
 
 ```yaml
