@@ -17,7 +17,7 @@ symptom knows why the code looks the way it does.
 | [#829][829] | `_openai_compat` sends every `inline_data` part as `image_url`, defaulting the mime to `image/png` | not hit here (no attachments sent) |
 | [#830][830] | No path from audio bytes to a model — the framework can speak but not be spoken to | fixed upstream (`0a65b83a`) |
 | [#837][837] | Any user-message attachment leaves the streaming path, so audio-in + audio-out cannot coexist | fixed upstream (`aa893793`) |
-| [#838][838] | A user message with an attachment and no text is silently discarded, and reports success | **worked around** |
+| [#838][838] | A user message with an attachment and no text is silently discarded, and reports success | fixed upstream (`06476ec4`) |
 
 [820]: https://github.com/Jaato-framework-and-examples/jaato/issues/820
 [821]: https://github.com/Jaato-framework-and-examples/jaato/issues/821
@@ -160,23 +160,21 @@ content, not on the reply merely being in the right language. (It missed
 the final word, which `mai-transcribe-2` catches from the same file —
 a fidelity difference between two models, not a defect in the path.)
 
-## #838 — an attachment with no text is discarded, and reports success
+## #838 — an attachment with no text is discarded (FIXED)
 
-Still open, and it shapes this driver. The natural voice call is
-`session.complete("", attachments=[utterance])`: the attachment IS the
-message, and a text prompt beside it is a second question the persona
-has to choose between. That call never reaches the provider and returns
-a completed turn with no output and no error.
+Fixed upstream in `06476ec4` — "an attachment is content, so a message
+carrying one is not empty". `run_voice.py` now makes the natural call,
+`session.complete("", attachments=[utterance])`, and the `CARRIER_PROMPT`
+workaround is gone.
 
-**Workaround:** `CARRIER_PROMPT` in `run_voice.py` — deliberately
-contentless ("Answer what you hear.") so it directs rather than asks.
-Delete it when #838 closes.
-
-It also hid an unrelated failure while this was being built. The first
-run returned `payload=None` silently; the same request WITH text raised
-`ModelTierConfigError` naming the real problem — a missing
-`output_modalities` assertion. Without the non-empty test the debugging
-would have stayed on the wrong layer.
+It is worth recording what its failure SHAPE cost while it stood, because
+that was worse than the bug. The first run of this driver returned
+`payload=None` and raised nothing, which reads as a model that declined
+to answer. The identical request WITH text raised `ModelTierConfigError`
+naming the real problem — a missing `output_modalities` assertion in the
+profile. A silent success hid an unrelated failure one layer down, and
+without trying the non-empty variant the debugging would have stayed on
+the wrong layer entirely.
 
 ## #830 — the inbound half had nowhere to deliver (FIXED)
 

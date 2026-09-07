@@ -223,13 +223,23 @@ because that is what a canonical name gets for free. The four canonical
 names still mean something to the framework, and `vision` alone implies
 a modality role — so this tier states its own.
 
-One workaround remains, marked in the code: the natural call is
-`session.complete("", attachments=[utterance])`, because the attachment
-*is* the message. That form is silently discarded and reports success
-([#838][838]), so `CARRIER_PROMPT` carries a contentless instruction
-until it closes.
+The call is `session.complete("", attachments=[utterance])`, with an
+empty prompt on purpose: the question IS the attachment, and a text
+prompt beside it would be a second question the persona has to choose
+between.
 
-[838]: https://github.com/Jaato-framework-and-examples/jaato/issues/838
+The loop also closes on itself, which is the shortest way to see both
+directions at once — the `speaker` profile speaks a question, and the
+`voice` profile is handed that audio as its input:
+
+```
+1. framework SPOKE the question : 127 244 bytes of audio
+2. framework HEARD it, answered : "...the sky being blue on a clear day."
+   and spoke the answer         : 13 chunks, 5.10s
+```
+
+No transcription anywhere in that loop — the audio goes to the model as
+audio, in both directions.
 
 ## Two scenarios
 

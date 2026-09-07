@@ -77,21 +77,19 @@ def playback_sink(player: PulsePlayer):
     return _sink
 
 
-#: What accompanies the audio.  This SHOULD be empty -- the question is
-#: the attachment, and a text prompt beside it is a second question the
-#: persona then has to choose between.  It cannot be, yet: a message
-#: with an attachment and no text never reaches the provider and reports
-#: a completed turn (#838), so the natural call silently does nothing.
-#: Kept deliberately contentless, so it directs rather than asks.
-CARRIER_PROMPT = "Answer what you hear."
-
-
 async def answer(session, wav: bytes) -> str:
-    """Hand one utterance to the model and let it speak the reply."""
+    """Hand one utterance to the model and let it speak the reply.
+
+    The prompt is EMPTY, and that is the point: the question IS the
+    attachment.  A text prompt beside it would be a second question the
+    persona has to choose between.  This form used to be discarded
+    silently while reporting a completed turn (#838); it is the natural
+    call and it is now the one made.
+    """
     player = PulsePlayer()
     try:
         payload = await session.complete(
-            CARRIER_PROMPT,
+            "",
             attachments=[{"mime_type": UTTERANCE_MIME,
                           "data": wav,
                           "display_name": "utterance.wav"}],
