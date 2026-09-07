@@ -55,7 +55,7 @@ model_tiers:
     model: openai/gpt-audio-mini
     provider: openrouter
     modalities: {audio: bidirectional}
-    description: 'the only tier the caller can hear; enter it to say anything out loud'
+    description: 'el único tier que el cliente oye; entra aquí para decir cualquier cosa en voz alta'
   # Entered to touch the systems, and left again on its own.  A text
   # model that is good at tool calls, doing the one thing the audio
   # model is bad at.  `exit_on: completion` means ONE completion here
@@ -63,20 +63,25 @@ model_tiers:
   # back, which the audio tier never did unprompted in four measured
   # runs of `duet`.
   #
-  # Named `systems`, not `planner`.  Tier names are free since #831, and
+  # Named `soporte`, not `planner`.  Tier names are free since #831, and
   # `planner` is one of the four CANONICAL names -- it carries the
   # framework's own meaning, "decides the answer and closes the
   # session", which is the opposite of this tier's job: it decides
   # nothing and must hand speech back.  A canonical name would have told
   # the model something false in the `enter_tier` schema, which is
-  # exactly where it is deciding where to go.  `terminal` fit the
-  # call-centre metaphor better still, and collides with this
-  # codebase's own vocabulary for terminal events.
-  systems:
+  # exactly where it is deciding where to go.
+  #
+  # Spanish because everything the model reads here is: the persona, the
+  # caller, the domain.  An English tier name was the one word in the
+  # prompt that belonged to a different language.
+  soporte:
     model: openai/gpt-4o-mini
     provider: openrouter
     exit_on: completion
-    description: 'consults the policy systems and opens the parte; CANNOT be heard — enter voice to say anything'
+    # En español, como el nombre y por la misma razón: la descripción se
+    # renderiza literalmente en el esquema de `enter_tier`, así que es
+    # esto lo que el modelo lee al decidir a dónde ir.
+    description: 'consulta la póliza y abre el parte; AQUÍ NO SE OYE — para decir algo, entra en voice'
   initial: voice
   fallback: voice
 
