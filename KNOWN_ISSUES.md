@@ -16,8 +16,8 @@ symptom knows why the code looks the way it does.
 | [#827][827] | `jaato-scaffold new cascade` hand-rolls the stage loop and discards the payload | **fixed here by hand** |
 | [#829][829] | `_openai_compat` sends every `inline_data` part as `image_url`, defaulting the mime to `image/png` | not hit here (no attachments sent) |
 | [#830][830] | No path from audio bytes to a model — the framework can speak but not be spoken to | fixed upstream (`0a65b83a`) |
-| [#837][837] | Any user-message attachment leaves the streaming path, so audio-in + audio-out cannot coexist | **blocks `run_voice.py`** |
-| [#838][838] | A user message with an attachment and no text is silently discarded, and reports success | **blocks `run_voice.py`** |
+| [#837][837] | Any user-message attachment leaves the streaming path, so audio-in + audio-out cannot coexist | fixed upstream (`aa893793`) |
+| [#838][838] | A user message with an attachment and no text is silently discarded, and reports success | **worked around** |
 
 [820]: https://github.com/Jaato-framework-and-examples/jaato/issues/820
 [821]: https://github.com/Jaato-framework-and-examples/jaato/issues/821
@@ -136,32 +136,47 @@ intended message. Fixed upstream on the media branch.
 
 ---
 
-## #837 / #838 — the two halves work, but not together
+## #837 — the two halves now work together (FIXED)
 
-#830 is fixed: `audio/*` reaches the wire as an `input_audio` block, and
-`voice.yaml` declares one tier with `modalities: {audio: bidirectional}`.
-Each direction works on its own. They cannot yet be used in one turn.
+#830 gave audio a way in; #837 was what stopped it being used in the
+same turn as audio out. An attachment routed to
+`send_message_with_parts`, whose loop called the provider's
+non-streaming `complete()` unconditionally, and OpenAI emits audio only
+while streaming — so a speaking tier answered a heard question with
+`400 Audio output requires stream: true`.
 
-Measured on daemon `0a65b83a`, same model, same tier:
+Fixed upstream in `aa893793`. Measured here after it landed, one turn,
+`voice` profile:
 
-| Request | Result |
-|---------|--------|
-| prompt, no attachment | 30 media chunks, spoken payload — the tier speaks |
-| prompt + `audio/wav` attachment | `400 Audio output requires stream: true` (#837) |
-| empty prompt + attachment | one `TURN_COMPLETED`, nothing sent (#838) |
+| | |
+|---|---|
+| sent | 88 044 bytes of real speech — "Esto es una nueva prueba." |
+| model repeated | "Esto es una nueva." |
+| spoke back | 4 chunks, 1.55s of audio |
 
-An attachment routes to `send_message_with_parts`, whose loop calls the
-provider's non-streaming `complete()` unconditionally
-(`jaato_session.py:10678`) — and OpenAI emits audio only while
-streaming, so the upstream is right to refuse. The path was built for
-images, where a non-streaming vision turn is reasonable; audio input is
-the first attachment kind whose *reply* may also be audio.
+The middle row is the one that matters: asked to repeat what it heard,
+the model returned the actual words. That is the inbound path proven on
+content, not on the reply merely being in the right language. (It missed
+the final word, which `mai-transcribe-2` catches from the same file —
+a fidelity difference between two models, not a defect in the path.)
 
-`run_voice.py` is written against the intended API and is correct as
-written — it fails at the framework boundary, not in this repo, which is
-why it ships unwired rather than worked around. Nothing here transcribes
-audio itself: a demo about what the framework does should not quietly do
-the interesting part on the side.
+## #838 — an attachment with no text is discarded, and reports success
+
+Still open, and it shapes this driver. The natural voice call is
+`session.complete("", attachments=[utterance])`: the attachment IS the
+message, and a text prompt beside it is a second question the persona
+has to choose between. That call never reaches the provider and returns
+a completed turn with no output and no error.
+
+**Workaround:** `CARRIER_PROMPT` in `run_voice.py` — deliberately
+contentless ("Answer what you hear.") so it directs rather than asks.
+Delete it when #838 closes.
+
+It also hid an unrelated failure while this was being built. The first
+run returned `payload=None` silently; the same request WITH text raised
+`ModelTierConfigError` naming the real problem — a missing
+`output_modalities` assertion. Without the non-empty test the debugging
+would have stayed on the wrong layer.
 
 ## #830 — the inbound half had nowhere to deliver (FIXED)
 

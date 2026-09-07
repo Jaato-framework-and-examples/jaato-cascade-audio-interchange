@@ -18,17 +18,21 @@ model_tiers:
   # instead of being withheld (#830).  Declaring only `outbound` here
   # would leave the model speaking into a room it cannot hear.
   #
-  # `executor` because tier names are a closed set (dispatcher |
-  # executor | planner | vision).  Only `vision` carries an implicit
-  # modality role; every other tier must say so with this key, which is
-  # exactly what this line does.
-  executor:
+  # Named `voice`, not `executor`.  Tier names stopped being a closed
+  # set in #831: a deployment names its own, subject to
+  # `^[a-z][a-z0-9_]{1,31}$`, and a free name MUST carry a `description`
+  # because that is what a canonical name gets for free.  `executor`
+  # would have been this tier's name under the old rule purely because
+  # it was "the one doing the work" — which said nothing about what it
+  # does.  The four canonical names still carry framework meaning;
+  # `vision` alone implies a modality role, so this tier states its own.
+  voice:
     model: openai/gpt-audio-mini
     provider: openrouter
     modalities: {audio: bidirectional}
     description: 'hears the question as audio and answers out loud'
-  initial: executor
-  fallback: executor
+  initial: voice
+  fallback: voice
 
 env:
   JAATO_OPENROUTER_API_KEY: pass://jaato/openrouter/api-key
