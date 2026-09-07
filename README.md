@@ -164,6 +164,8 @@ enough; the client just cannot parse it). See KNOWN_ISSUES.md #823.
 | `speech_collector.py` | Reassembles chunks into a WAV — likewise knows nothing about jaato |
 | `ptt_capture.py` | Cuts a push-to-talk microphone into utterances — knows nothing about jaato |
 | `run_voice.py` | The INBOUND driver: an utterance goes up as an attachment, the answer comes back as speech |
+| `.jaato/agents/helpdesk.md` | Esteban — a simulated insurance helpdesk that opens the call |
+| `.jaato/profiles/openrouter_gpt_audio_mini/listener.yaml` | Audio IN, text OUT — the instrument for checking what was said |
 | `.jaato/profiles/_base_speaker.yaml` | Tier-1 base: no plugins, completion gating, no provider bound |
 | `.jaato/profiles/openrouter_gpt_audio_mini/speaker.yaml` | Tier-2 set: binds OpenRouter + `openai/gpt-audio-mini`, declares the speaking tier |
 | `.jaato/agents/speaker.md` | The `speaker` persona — answer in one spoken sentence |
@@ -240,6 +242,45 @@ directions at once — the `speaker` profile speaks a question, and the
 
 No transcription anywhere in that loop — the audio goes to the model as
 audio, in both directions.
+
+## The helpdesk scenario
+
+`run_voice.py --greet --agent helpdesk` makes the agent answer the
+phone. It is Esteban, of a simulated Línea Directa Aseguradora customer
+line, and he speaks BEFORE the first press:
+
+> «Buenos días, bienvenido a la línea de atención al cliente de Línea
+> Directa Aseguradora. Me llamo Esteban, ¿en qué puedo ayudarle?»
+
+Then you press, ask, and he answers — the order a real call has, which
+is why the greeting is not just another turn in the loop.
+
+The greeting's WORDS live in the persona, not the driver. All the driver
+sends is a stage direction (`OPENING_CUE`, a bracketed line saying the
+call is connected); who the agent is and how it answers the phone are
+the persona's business. Verified that the direction is acted on rather
+than read aloud — see below for how.
+
+It is a SIMULATION and the persona says so: no policy data, no records,
+and an explicit instruction not to invent a policy number, because an
+invented one sounds exactly like a real one.
+
+## Checking what was actually said — the `listener` profile
+
+A spoken turn returns no text, so a speaking agent cannot tell you what
+it heard or said. `listener` is the third direction and the only one
+that writes: `modalities: {audio: inbound}` with no outbound role, so
+the reply arrives as ordinary text tokens.
+
+That makes it the instrument for checking the other two. It is how the
+greeting above was verified — generate it, feed the WAV to `listener`,
+read back the words — and it caught two real slips in one pass: the
+model saying "Línea Directa Seguradora" without the A, and answering
+"¿en qué puedo ayudarte?" when the persona had asked for *usted*.
+
+```
+python run_voice.py --greet --agent helpdesk   # take the call
+```
 
 ## Two scenarios
 

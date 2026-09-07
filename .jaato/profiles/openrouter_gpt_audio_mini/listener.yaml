@@ -1,0 +1,35 @@
+name: listener
+# The third direction, and the only one that writes: audio IN, text OUT.
+#
+# `speaker` proves a tier can emit audio; `voice` proves one tier can do
+# both.  This one declares INBOUND ALONE, which is what makes it useful
+# as an instrument: a spoken turn returns no text (the transcript is
+# attached to the response after streaming and never reaches an
+# AGENT_OUTPUT event), so a model that SPEAKS cannot tell you what it
+# heard.  This one can, because it does not speak.
+inherits: [_base_voice]
+description: Hears audio and answers in TEXT — the instrument used to check what was said.
+plugins: []
+
+# Required at top level even though the tier declares both (#822).
+model: openai/gpt-audio-mini
+provider: openrouter
+
+model_tiers:
+  listener:
+    model: openai/gpt-audio-mini
+    provider: openrouter
+    # INBOUND only.  No outbound role, so no `output_modalities`
+    # assertion is needed and none is made: the tier never asks for
+    # audio out, and the reply arrives as ordinary text tokens.
+    modalities: {audio: inbound}
+    description: 'hears audio and reports what it heard, in writing'
+  initial: listener
+  fallback: listener
+
+env:
+  JAATO_OPENROUTER_API_KEY: pass://jaato/openrouter/api-key
+
+plugin_configs:
+  openrouter:
+    api_key: "${JAATO_OPENROUTER_API_KEY}"

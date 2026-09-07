@@ -48,7 +48,7 @@ import os
 import queue
 import sys
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 from jaato_sdk import ClientType, IPCClient, SessionCreateFailed
 from jaato_sdk.client.convenience import AgentError
@@ -93,8 +93,22 @@ def playback_sink(player: PulsePlayer, meter: Dict[str, int]):
     return _sink
 
 
-async def answer(session, wav: bytes) -> str:
-    """Hand one utterance to the model and let it speak the reply.
+#: What opens a call the AGENT speaks first.
+#:
+#: A stage direction, not a question.  The persona owns the words of the
+#: greeting -- who the agent is and how it answers the phone belong to
+#: the persona, not to the driver -- and this only tells it that the
+#: line is now open.  Square brackets and the third person keep it
+#: readable as direction rather than as something to say aloud.
+OPENING_CUE = "[La llamada se ha establecido. El cliente está a la escucha.]"
+
+
+async def speak(session, prompt: str, wav: Optional[bytes] = None) -> str:
+    """Run one turn and play whatever the model says.
+
+    One function for both kinds of turn because they differ only in what
+    is handed over: the opening carries a stage direction and no audio,
+    every later turn carries audio and no words.
 
     ``ask`` rather than ``complete``: one call is one TURN, and this
     session runs many of them.  ``complete`` waits for the session to
@@ -102,20 +116,22 @@ async def answer(session, wav: bytes) -> str:
     the `voice` profile declares no completion schema precisely so the
     session survives the reply and remembers it.
 
-    The prompt is EMPTY, and that is the point: the question IS the
-    attachment.  A text prompt beside it would be a second question the
-    persona has to choose between.  It is also the only way in: neither
-    `session.wake` nor `inject_prompt` carries an attachment (#845), so
-    audio reaches a live session through ``send_message`` or not at all.
+    On an audio turn the prompt is EMPTY, and that is the point: the
+    question IS the attachment.  A text prompt beside it would be a
+    second question the persona has to choose between.  It is also the
+    only way in: neither `session.wake` nor `inject_prompt` carries an
+    attachment (#845), so audio reaches a live session through
+    ``send_message`` or not at all.
     """
     player = PulsePlayer()
     meter = {"bytes": 0}
+    attachments = None if wav is None else [
+        {"mime_type": UTTERANCE_MIME, "data": wav,
+         "display_name": "utterance.wav"}]
     try:
         text = await session.ask(
-            "",
-            attachments=[{"mime_type": UTTERANCE_MIME,
-                          "data": wav,
-                          "display_name": "utterance.wav"}],
+            prompt,
+            attachments=attachments,
             on_media=playback_sink(player, meter),
         )
     finally:
@@ -138,6 +154,12 @@ async def main() -> int:
         description="Speak to the agent; it speaks back.")
     parser.add_argument("--once", action="store_true",
                         help="handle one utterance and exit")
+    parser.add_argument("-a", "--agent", default="voice",
+                        help="persona to answer with (default: voice; "
+                             "`helpdesk` is Esteban, who opens the call)")
+    parser.add_argument("-g", "--greet", action="store_true",
+                        help="let the agent speak first, before the first "
+                             "press — how a call actually starts")
     args = parser.parse_args()
 
     # The mic thread and the asyncio loop are different worlds, so
@@ -174,8 +196,15 @@ async def main() -> int:
                 min_protocol_version=MEDIA_PROTOCOL,
                 connect_timeout=120.0,
                 profile="voice",
-                agent="voice",
+                agent=args.agent,
         ) as session:
+            # The agent answers the phone.  This happens BEFORE the mic
+            # is read, so the caller hears the greeting and then decides
+            # what to ask -- which is the order a real call has, and the
+            # reason it is not just another turn in the loop.
+            if args.greet:
+                print("  opening the call...", flush=True)
+                print(f"  said: {await speak(session, OPENING_CUE)}", flush=True)
             while True:
                 try:
                     wav = await asyncio.to_thread(inbox.get, True, 0.5)
@@ -183,7 +212,7 @@ async def main() -> int:
                     mic.raise_if_faulted()    # surface a dead half promptly
                     continue
                 print(f"  heard {len(wav)} bytes; asking...", flush=True)
-                said = await answer(session, wav)
+                said = await speak(session, "", wav)
                 print(f"  said: {said.strip() or '(nothing)'}", flush=True)
                 if args.once:
                     return 0
