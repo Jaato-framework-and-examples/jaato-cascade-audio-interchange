@@ -265,6 +265,51 @@ It is a SIMULATION and the persona says so: no policy data, no records,
 and an explicit instruction not to invent a policy number, because an
 invented one sounds exactly like a real one.
 
+### Where the domain knowledge lives, and where it should live
+
+Esteban follows a real intake script — is anyone hurt, then policy
+number and DNI and plate, then the facts, then the other driver, then
+the 7-day deadline. That script is not in the persona. It sits in
+`.jaato/knowledge/siniestro_intake.md` and is pulled into the prompt at
+session prep by a prefetch directive:
+
+```
+{{!py:scripts/knowledge.py siniestro_intake.md}}
+```
+
+The framework runs it during `configure()`, before the first turn, so
+the knowledge is PRESENT rather than something the agent must decide to
+look up. Persona and domain then change for different reasons: who the
+agent is versus what the domain says.
+
+**The correct jaato pattern is a reference, not a prefetch.** Domain
+knowledge belongs in the `references` plugin's catalog — IDs and tags,
+pre-selected per profile — and that is what a production agent should
+use. What follows is why this demo deviates, not an argument that the
+deviation generalises:
+
+```yaml
+plugins: [references]
+plugin_configs:
+  references:
+    preselected: [siniestro_intake]
+    lookup_strategy: hybrid
+```
+
+That gives what a prefetch cannot: selection by tag rather than
+filename, semantic matching, transitive references, and the agent
+reaching further documents mid-call with `selectReferences` instead of
+carrying the whole catalog in its prompt from the first token.
+
+This demo does not use it for one reason, and it is a real one: the
+speaking profile runs `plugins: []` on purpose, because every tool in
+the schema is a chance for the model to emit a tool call instead of
+speech — and `listReferences` is a **core** tool, in the schema from
+turn one. Against a model already inclined to read tool names aloud
+(see KNOWN_ISSUES), that is a poor trade in a demo about audio. It is a
+fine trade in a text agent, where a tool call costs nothing anyone can
+hear.
+
 ## Checking what was actually said — the `listener` profile
 
 A spoken turn returns no text, so a speaking agent cannot tell you what
