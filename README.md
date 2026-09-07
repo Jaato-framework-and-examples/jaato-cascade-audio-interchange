@@ -1,13 +1,66 @@
 # jaato-cascade-audio-interchange
 
-A two-process demonstration that a jaato session can **answer a text
-question out loud**, and that a second, unrelated process can **listen to
-it as it speaks**.
+**You phone an insurance company. Esteban answers, listens to your
+problem, finds your policy in their systems, takes the parte, and reads
+you back an expediente number — out loud, both directions, one session.**
 
-The model is asked "What colour is the sky on a clear day?" and replies
-with audio. `run_cascade.py` saves that audio as a WAV; `run_observer.py`
-— which never creates a session and never sends a message — plays the
-same bytes through PulseAudio as they arrive.
+That is the `helpdesk` scenario, and it is what this repo builds up to:
+
+```bash
+python mock_helpdesk.py &                 # the systems he consults, simulated
+python run_voice.py --scenario helpdesk   # tap the mic key and talk
+```
+
+```
+  opening the call...
+  said: (spoke 6.7s)                      ← «Buenos días, bienvenido a la
+  heard 337644 bytes; asking...              línea de atención al cliente…»
+    -> enter_tier()                       ← the audio model hands off
+    <- enter_tier ok
+    -> call_service()                     ← a text model consults the systems
+    <- call_service ok
+  [mock] "GET /v1/polizas?dni=51234567A" 200
+    -> enter_tier()                       ← and hands back to be heard
+  said: (spoke 18.2s)
+```
+
+Four framework capabilities have to hold at once for those lines to
+appear, and the smaller scenarios in this repo are each one of them on
+its own: a tier that **speaks** (`speaker`), a hand-off that **returns
+reliably** (`duet`), a tier that **hears** (`voice`), and one that hears
+and **writes down** what it heard (`listener`). Read them in that order
+if the helpdesk looks like too much at once.
+
+One turn of that call, end to end:
+
+```mermaid
+flowchart TD
+    P(["you tap the key<br/>and speak"]) --> C["ptt_capture.py<br/>press signal cuts the utterance<br/>silence trimmed"]
+    C -- "audio/wav attachment" --> V
+
+    subgraph session ["one jaato session — never completes, so the call survives"]
+        V["<b>voice</b> tier · gpt-audio-mini<br/>modalities: {audio: bidirectional}<br/>hears · writes the data down · speaks"]
+        N["<b>planner</b> tier · gpt-4o-mini<br/>exit_on: completion<br/>calls the systems"]
+        V -- "enter_tier(planner)" --> N
+        N -- "enter_tier(voice)" --> V
+    end
+
+    N -- "call_service" --> M["mock_helpdesk.py<br/>GET /v1/polizas<br/>POST /v1/siniestros"]
+    M -- "titular · vehículo · expediente" --> N
+    V -- "ToolOutputEvent<br/>call_id=model-output" --> S(["you hear the answer"])
+```
+
+The audio tier is the only one the caller can hear, and the planner is
+the only one that reliably calls a tool — so every turn crosses the
+boundary twice, and `exit_on: completion` is what brings control back
+without the entered model having to remember to hand it over.
+
+The original demonstration is still here and still the smallest thing
+that works: a jaato session answering a **text** question out loud,
+while a second, unrelated process listens to it as it speaks.
+`run_cascade.py` saves that audio as a WAV; `run_observer.py` — which
+never creates a session and never sends a message — plays the same bytes
+through PulseAudio as they arrive.
 
 ```mermaid
 flowchart LR
@@ -39,7 +92,66 @@ for your own result, `cascade_events(...)` for someone else's — and the
 split between the two scripts follows that line, not a lifecycle-vs-data
 one.
 
+## The five scenarios
+
+Each one adds a single capability to the one before it. `helpdesk` is
+the only one that needs all of them.
+
+| scenario | direction | tiers | run it with | demonstrates |
+|---|---|---|---|---|
+| `speaker` | audio out | one | `./run.sh` | outbound media, minimally — and the nudge misfiring |
+| `duet` | audio out | two | `./run.sh -s duet` | a hand-off that returns, via `exit_on: completion` |
+| `voice` | in **and** out | one | `python run_voice.py` | a spoken conversation, many turns on one session |
+| `listener` | audio in, **text** out | one | (used as an instrument) | reading back what was actually said |
+| `helpdesk` | in and out | two | `python run_voice.py --scenario helpdesk` | all of the above, plus systems it can consult |
+
+`speaker` and `duet` answer a TEXT question aloud and differ in shape:
+
+| | `speaker` | `duet` |
+|---|---|---|
+| tiers | one | two: a text planner, an audio executor |
+| audio generations per answer | **2** (the nudge fires) | **1** |
+| completion nudge | fires ~every run | never |
+| `spoken` payload | describes the nudge, not the answer | matches what was said |
+| payload checked against history | no | yes, `completion_processors` |
+
+Use `speaker` to see the smallest possible outbound-audio client. Use
+`duet` to see why the hand-off needs `exit_on`. Use `helpdesk` for
+anything you intend to build on.
+
 ## What it actually demonstrates
+
+Taking the helpdesk first, since it exercises the most:
+
+**A tier changes which MODEL is at the wheel, not which tools exist.**
+The tool schema is session-wide and sits in the prompt-cache prefix, so
+`voice` and `planner` see the same `call_service`. What the second tier
+buys is a model that will actually call it: on one tier
+`gpt-audio-mini` looked a policy up correctly and then, asked to open
+the parte, *said* «voy a abrir el parte» and called nothing. Measured on
+the same six-turn call — one tier: `POST /v1/siniestros` never issued;
+two tiers: `200`.
+
+**Direction is part of a modality, not an afterthought.**
+`{audio: bidirectional}` on one tier is two separate grants: outbound
+puts `modalities: ["text","audio"]` on the request, inbound is what lets
+an `audio/*` attachment reach the wire as an `input_audio` block. A tier
+that declares only outbound speaks into a room it cannot hear.
+
+**Persona, domain knowledge and systems are three different files.**
+Who Esteban is lives in `.jaato/agents/helpdesk.md`; what a claim intake
+requires lives in `.jaato/knowledge/siniestro_intake.md`; the systems he
+consults are described in `.jaato/services/lineadirecta/`. Each changes
+for its own reason, and a second persona on the same domain reuses the
+middle one untouched.
+
+**A conversation is one session, many turns — so it must never
+complete.** `_base_voice` is `_base_speaker` with the completion schema
+removed, and that single subtraction is the difference: calling
+`signal_completion` makes a session quiescent, and a helpdesk that
+completes after every reply ends the call the customer is still on.
+
+And from the original outbound demo:
 
 **The tier declares the role; nothing in this client asks for audio.**
 The `speaker` profile has one tier carrying `modalities: {audio:
@@ -76,7 +188,19 @@ make.
 
 ## Running it
 
+Two entry points, because the two directions are two programs.
+`run_voice.py` is the one you talk to; `run.sh` runs the text-question
+demos and can attach the observer.
+
 ```bash
+# you speak to it — the conversational scenarios
+python mock_helpdesk.py &                    # only for --scenario helpdesk
+python run_voice.py --scenario helpdesk      # the full demo
+python run_voice.py                          # plain voice chat, no systems
+python run_voice.py --once                   # one exchange, then exit
+python run_voice.py --help                   # every flag
+
+# it speaks a written question — the original demos
 ./run.sh                                  # driver only, writes out/answer.wav
 ./run.sh -o                               # driver + observer, plays it live
 ./run.sh -p "¿Por qué el mar es salado?"  # ask something else
@@ -419,22 +543,7 @@ model saying "Línea Directa Seguradora" without the A, and answering
 python run_voice.py --greet --agent helpdesk   # take the call
 ```
 
-## Two scenarios
-
-Same question, same models, two shapes. Measured on
-`openai/gpt-audio-mini` (+ `gpt-4o-mini` as the planner):
-
-| | `speaker` | `duet` |
-|---|---|---|
-| tiers | one | two: a text planner, an audio executor |
-| audio generations per answer | **2** (the nudge fires) | **1** |
-| completion nudge | fires ~every run | never |
-| `spoken` payload | describes the nudge, not the answer | matches what was said |
-| payload checked against history | no | yes, `completion_processors` |
-| demonstrates | outbound media, minimally | how the framework makes a hand-off reliable |
-
-Use `speaker` to see the smallest possible outbound-audio client. Use
-`duet` for anything you intend to build on.
+## The two text-question scenarios, in detail
 
 ### `speaker` — the minimal one, and the one that misbehaves
 

@@ -55,7 +55,7 @@ model_tiers:
     model: openai/gpt-audio-mini
     provider: openrouter
     modalities: {audio: bidirectional}
-    description: 'hears the question as audio and answers out loud'
+    description: 'the only tier the caller can hear; enter it to say anything out loud'
   # Entered to touch the systems, and left again on its own.  A text
   # model that is good at tool calls, doing the one thing the audio
   # model is bad at.  `exit_on: completion` means ONE completion here
@@ -66,7 +66,7 @@ model_tiers:
     model: openai/gpt-4o-mini
     provider: openrouter
     exit_on: completion
-    description: 'consults the policy systems and opens the parte; you return automatically'
+    description: 'consults the policy systems and opens the parte; CANNOT be heard — enter voice to say anything'
   initial: voice
   fallback: voice
 
@@ -75,6 +75,17 @@ env:
   # Where `mock_helpdesk.py` listens.  `_service.yaml` interpolates it
   # into the base_url, so the catalog carries no port of its own.
   JAATO_HELPDESK_PORT: '8731'
+
+# Trim the conversation as it grows.  A voice call accumulates audio
+# the way a text one does not: every utterance stays in history as
+# base64 and is re-sent on EVERY later turn, so a five-question call
+# was carrying ~2.8 MB of audio (~3.8 MB encoded) by the last one, and
+# each turn costs more than the one before it.  A caller's earlier
+# audio has no value once it has been answered -- the conversation
+# carries the meaning -- so old turns are the right thing to drop.
+gc:
+  type: budget
+  threshold_percent: 60.0
 
 plugin_configs:
   # `call_service` is gated, and this driver answers no permission

@@ -33,6 +33,7 @@ Contract, per the producer's spec:
 """
 from __future__ import annotations
 
+import audioop
 import re
 import shutil
 import queue
@@ -84,13 +85,21 @@ LATENCY_MS = 50
 #: window, which is L PLUS the operator's reaction time -- an upper
 #: bound mistaken for a measurement, and excluded by the interval above.
 #:
-#: 2500 ms sits comfortably past that interval rather than near it,
-#: because L is a network path and will vary.  Verified on three real
-#: presses: each captured complete, with 2.24 s, 3.31 s and 3.41 s of
-#: trailing margin.  Over-shooting costs trailing silence, which a
-#: transcriber charges almost nothing for; under-shooting costs a
-#: truncated final word, which nothing recovers.
-TAIL_MS = 2500
+#: 1200 ms: past the 840 ms ceiling with room for jitter, and no more.
+#:
+#: It was 2500 ms, chosen when the only cost of over-shooting looked
+#: like trailing silence a transcriber barely charges for.  That was
+#: wrong about the cost.  This tail is DEAD AIR IN A CONVERSATION: it
+#: runs after the caller stops speaking and before the request is even
+#: sent, so it is added in full to the pause they sit through.  Measured
+#: end to end, the gap before the agent starts talking was ~6.05 s, of
+#: which 2.5 s was this constant -- 41 % of the silence, contributed by
+#: a number picked for safety against a bound of 840 ms.
+#:
+#: The remaining margin is 360 ms over the measured ceiling.  Verified
+#: complete captures had 2.24 s, 3.31 s and 3.41 s of trailing slack at
+#: 2500 ms, so cutting 1300 ms still leaves every one of them whole.
+TAIL_MS = 1200
 
 #: Refuse to grow the ring without bound.  A press that outruns this is
 #: a producer or operator fault, not something to absorb silently.
@@ -101,6 +110,18 @@ MAX_UTTERANCE_SECONDS = 120
 MAX_PENDING_CUTS = 32
 
 _LINE = re.compile(r"key:'([^']+)'\s+value:'([^']*)'")
+
+
+#: Below this RMS a 20 ms frame counts as silence when trimming.  Not a
+#: boundary detector -- the press already decided where the utterance
+#: starts and ends, and this only removes quiet from INSIDE those
+#: bounds, so it can neither merge two utterances nor split one.
+SILENCE_RMS = 120
+
+#: Silence kept either side of the speech.  Enough that a soft first
+#: consonant is not clipped, far less than the seconds the press
+#: boundaries leave in.
+SILENCE_MARGIN_MS = 200
 
 
 @dataclass
@@ -118,15 +139,46 @@ class Utterance:
     seconds: float
     started_at: float
 
+    def trimmed(self) -> bytes:
+        """The PCM with silence removed from both ends.
+
+        The press decides WHERE an utterance begins and ends; this only
+        removes quiet from inside those bounds, so it cannot merge two
+        utterances or split one -- the failure mode that rules level
+        detection out of boundary decisions does not apply here.
+
+        Worth doing because the bounds are generous by construction.  A
+        press captures the operator's reaction time at the front and
+        :data:`TAIL_MS` at the back, and measured utterances ran 7.6 s to
+        27.8 s for a sentence or two of speech.  Every one of those
+        seconds is uploaded and billed as audio input, and paid for again
+        in time-to-first-reply.
+
+        Returns the original PCM when nothing crosses the threshold: an
+        utterance of pure silence is a fact about the call, and sending
+        nothing at all would look like a fault instead.
+        """
+        step = int(RATE * 0.020) * WIDTH
+        frames = [self.pcm[i:i + step] for i in range(0, len(self.pcm), step)]
+        loud = [i for i, f in enumerate(frames)
+                if audioop.rms(f, WIDTH) > SILENCE_RMS]
+        if not loud:
+            return self.pcm
+        margin = int(SILENCE_MARGIN_MS / 20)
+        lo = max(0, loud[0] - margin)
+        hi = min(len(frames), loud[-1] + 1 + margin)
+        return b"".join(frames[lo:hi])
+
     def wav(self) -> bytes:
-        """The PCM wrapped in a WAV header, for anything that wants a file."""
+        """The trimmed PCM wrapped in a WAV header, for anything wanting a file."""
         import io, wave
+        pcm = self.trimmed()
         buf = io.BytesIO()
         with wave.open(buf, "wb") as w:
             w.setnchannels(CHANNELS)
             w.setsampwidth(WIDTH)
             w.setframerate(RATE)
-            w.writeframes(self.pcm)
+            w.writeframes(pcm)
         return buf.getvalue()
 
 

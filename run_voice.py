@@ -39,7 +39,7 @@ Usage:
 
   # the helpdesk, with its simulated systems -- start the mock first:
   python mock_helpdesk.py &
-  python run_voice.py --profile helpdesk --agent helpdesk --greet
+  python run_voice.py --scenario helpdesk
 
 Preflight:
   jaato-doctor --workspace . --env-file .env
@@ -54,7 +54,7 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional
 
-from jaato_sdk import ClientType, IPCClient, SessionCreateFailed
+from jaato_sdk import ClientType, EventType, IPCClient, SessionCreateFailed
 from jaato_sdk.client.convenience import AgentError
 from jaato_sdk.client.ipc import DEFAULT_SOCKET_PATH
 
@@ -74,6 +74,12 @@ MEDIA_PROTOCOL = "1.4"
 #: format token -- a mime it cannot map is withheld rather than sent
 #: mislabelled (#829), so this string is load-bearing.
 UTTERANCE_MIME = "audio/wav"
+
+#: The demos, each naming the three things that must agree.
+SCENARIOS = {
+    "voice": {"profile": "voice", "agent": "voice", "greet": False},
+    "helpdesk": {"profile": "helpdesk", "agent": "helpdesk", "greet": True},
+}
 
 #: Reply audio is pcm16 at 24 kHz mono -- the only format OpenAI emits
 #: while streaming.  Used to report a spoken reply's LENGTH, since its
@@ -105,6 +111,39 @@ def playback_sink(player: PulsePlayer, meter: Dict[str, int]):
 #: line is now open.  Square brackets and the third person keep it
 #: readable as direction rather than as something to say aloud.
 OPENING_CUE = "[La llamada se ha establecido. El cliente está a la escucha.]"
+
+
+def trace_tools(session) -> None:
+    """Print every tool call and permission decision as it happens.
+
+    A voice demo is opaque in a way a text one is not: the audience
+    hears a sentence and cannot tell whether the agent CONSULTED a
+    system or merely said it would.  Those are the two outcomes this
+    whole design is trying to keep apart, so the one channel that can
+    distinguish them should not be silent.
+
+    It earns its place as a diagnostic too.  A permission prompt nobody
+    can answer ends the turn with no error at all, and an announced-
+    but-uncalled tool looks identical from outside to a called one --
+    both cost a debugging round here before this existed.
+    """
+    def _start(ev) -> None:
+        args = getattr(ev, "arguments", None) or getattr(ev, "args", None) or ""
+        print(f"    -> {getattr(ev, 'tool_name', '?')}({str(args)[:110]})", flush=True)
+
+    def _end(ev) -> None:
+        ok = getattr(ev, "success", None)
+        mark = "ok" if ok is None or ok else "FAILED"
+        result = str(getattr(ev, "result", "") or "")[:110]
+        print(f"    <- {getattr(ev, 'tool_name', '?')} {mark} {result}", flush=True)
+
+    def _perm(ev) -> None:
+        print(f"    !! permission requested for {getattr(ev, 'tool_name', '?')} "
+              f"— nothing here can answer it", flush=True)
+
+    session._client.subscribe(EventType.TOOL_CALL_START, _start)
+    session._client.subscribe(EventType.TOOL_CALL_END, _end)
+    session._client.subscribe(EventType.PERMISSION_REQUESTED, _perm)
 
 
 async def speak(session, prompt: str, wav: Optional[bytes] = None) -> str:
@@ -158,16 +197,29 @@ async def main() -> int:
         description="Speak to the agent; it speaks back.")
     parser.add_argument("--once", action="store_true",
                         help="handle one utterance and exit")
-    parser.add_argument("--profile", default="voice",
-                        help="profile to run (default: voice; `helpdesk` "
-                             "adds the simulated policy/claim systems)")
-    parser.add_argument("-a", "--agent", default="voice",
-                        help="persona to answer with (default: voice; "
-                             "`helpdesk` is Esteban, who opens the call)")
-    parser.add_argument("-g", "--greet", action="store_true",
-                        help="let the agent speak first, before the first "
-                             "press — how a call actually starts")
+    parser.add_argument("-s", "--scenario", choices=sorted(SCENARIOS),
+                        default="voice",
+                        help="which demo to run (default: voice)")
+    parser.add_argument("--profile", default=None,
+                        help="override the scenario's profile")
+    parser.add_argument("-a", "--agent", default=None,
+                        help="override the scenario's persona")
+    parser.add_argument("-g", "--greet", action="store_true", default=None,
+                        help="let the agent speak first (the helpdesk "
+                             "scenario does this anyway)")
     args = parser.parse_args()
+
+    # A SCENARIO picks profile, persona and opening together, because
+    # they are not independent: `helpdesk` needs Esteban AND the tiers
+    # that let him consult the systems.  Choosing them separately is a
+    # trap -- `--agent helpdesk` alone ran the helpdesk PERSONA against
+    # the plain `voice` profile, which has no planner tier and no
+    # service connector, so the agent was told to consult systems it did
+    # not have and went looking for tools instead.
+    scenario = SCENARIOS[args.scenario]
+    profile = args.profile or scenario["profile"]
+    agent = args.agent or scenario["agent"]
+    greet = scenario["greet"] if args.greet is None else args.greet
 
     # The mic thread and the asyncio loop are different worlds, so
     # utterances cross on a queue rather than by calling into the loop
@@ -192,6 +244,8 @@ async def main() -> int:
         print(f"microphone: {exc}", file=sys.stderr)
         return 2
 
+    print(f"scenario {args.scenario}: profile={profile} agent={agent}"
+          f"{' (agent opens the call)' if greet else ''}", flush=True)
     print("listening — hold the push-to-talk key and speak (Ctrl-C to stop)",
           flush=True)
     try:
@@ -202,14 +256,15 @@ async def main() -> int:
                 client_type=ClientType.API,   # keeps signal_completion
                 min_protocol_version=MEDIA_PROTOCOL,
                 connect_timeout=120.0,
-                profile=args.profile,
-                agent=args.agent,
+                profile=profile,
+                agent=agent,
         ) as session:
+            trace_tools(session)
             # The agent answers the phone.  This happens BEFORE the mic
             # is read, so the caller hears the greeting and then decides
             # what to ask -- which is the order a real call has, and the
             # reason it is not just another turn in the loop.
-            if args.greet:
+            if greet:
                 print("  opening the call...", flush=True)
                 print(f"  said: {await speak(session, OPENING_CUE)}", flush=True)
             while True:
