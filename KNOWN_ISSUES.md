@@ -18,6 +18,7 @@ symptom knows why the code looks the way it does.
 | [#830][830] | No path from audio bytes to a model — the framework can speak but not be spoken to | fixed upstream (`0a65b83a`) |
 | [#837][837] | Any user-message attachment leaves the streaming path, so audio-in + audio-out cannot coexist | fixed upstream (`aa893793`) |
 | [#838][838] | A user message with an attachment and no text is silently discarded, and reports success | fixed upstream (`06476ec4`) |
+| [#845][845] | Neither resume verb carries an attachment, so a multimodal session cannot be driven after it completes | **shaped the `voice` profile** |
 
 [820]: https://github.com/Jaato-framework-and-examples/jaato/issues/820
 [821]: https://github.com/Jaato-framework-and-examples/jaato/issues/821
@@ -28,6 +29,7 @@ symptom knows why the code looks the way it does.
 [830]: https://github.com/Jaato-framework-and-examples/jaato/issues/830
 [837]: https://github.com/Jaato-framework-and-examples/jaato/issues/837
 [838]: https://github.com/Jaato-framework-and-examples/jaato/issues/838
+[845]: https://github.com/Jaato-framework-and-examples/jaato/issues/845
 
 ---
 
@@ -196,6 +198,47 @@ that the framework has no ears.
 and send text. That is what #830 exists to remove, so it is deliberately
 NOT done in this repo yet — a demo whose whole point is what the
 framework does should not quietly do the interesting part itself.
+
+## #845 - a completed multimodal session cannot be resumed with audio
+
+The second question from a real microphone failed:
+
+```
+400 ... An assistant message with 'tool_calls' must be followed by tool
+messages responding to each 'tool_call_id'. The following tool_call_ids
+did not have response messages: call_LrULkuY38Qevehlm07Fm95rc
+```
+
+Not a framework defect - a driver one. `signal_completion` makes a
+session QUIESCENT: the daemon emits SESSION_TERMINATED and releases the
+runner. The driver held ONE session across the whole conversation and
+sent the second utterance into a session that had already ended, so the
+first turn's completion `tool_call` was replayed with no tool response.
+Sending the same audio twice hung instead of erroring; same cause.
+
+The documented way back into a completed session is `session.wake`,
+which cold-revives it from disk. It takes `{session_id, text, source?,
+event_id?}` - **no attachments**. `inject_prompt` takes `text` likewise,
+and into a completed session returns `"terminated"`, a non-delivery
+status rather than an error. So neither verb can carry a spoken
+utterance (#845), and resume is closed to exactly the sessions audio
+input made possible.
+
+**What this repo does instead:** `_base_voice` declares no completion
+schema, so the session never terminates itself, and `run_voice.py` calls
+`ask()` once per press on one long-lived session. A conversation ends
+when the person stops talking, which needs no completion signal at all.
+Verified: two consecutive presses on one session, no 400 and no hang,
+the second turn reusing the warm session.
+
+**What it costs:** the `spoken` payload goes with the schema, and a
+spoken turn returns no text - the provider builds the transcript and
+attaches it to the response AFTER streaming (`ensure_spoken_part`), so
+history has it and the model remembers what it said, but no
+AGENT_OUTPUT event carries it. Measured: 14 media chunks / 5.45s of
+speech against one AGENT_OUTPUT, `source='user'`, empty. The driver
+reports the reply's LENGTH rather than transcribing our own audio to
+narrate what the listener just heard.
 
 # Open questions (not yet filed)
 

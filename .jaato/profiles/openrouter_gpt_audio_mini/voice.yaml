@@ -1,8 +1,10 @@
 name: voice
-# Inherits the SPEAKER base for the same reason `duet` does: the stage
-# contract is identical, and the only thing this scenario changes is the
-# tier's modality DIRECTION.
-inherits: [_base_speaker]
+# Inherits `_base_voice`, NOT `_base_speaker`.  The two differ in one
+# thing: this one declares no completion schema, so the session never
+# signals completion and never terminates itself.  A conversation runs
+# many turns on one session; a completion after each reply would end the
+# session the listener is still speaking to.
+inherits: [_base_voice]
 description: You speak to it and it speaks back — one tier, both directions.
 plugins: []
 

@@ -25,6 +25,14 @@ The microphone half is `ptt_capture.py`, which knows nothing about
 jaato — it turns a push-to-talk key into utterances and stops there.
 The join between the two is this file, and it is deliberately thin.
 
+One session, many turns.  The `voice` profile declares no completion
+schema, so nothing terminates the session between questions and the
+model keeps the conversation: a follow-up like "and tomorrow?" resolves
+against what was already asked.  A profile that DID complete would end
+the session after the first reply, and the next utterance would replay a
+history whose tool_calls never got their response -- a 400 from the
+upstream, or a hang.
+
 Usage:
   python run_voice.py            # talk until Ctrl-C
   python run_voice.py --once     # one utterance, then exit
@@ -40,6 +48,7 @@ import os
 import queue
 import sys
 from pathlib import Path
+from typing import Dict
 
 from jaato_sdk import ClientType, IPCClient, SessionCreateFailed
 from jaato_sdk.client.convenience import AgentError
@@ -62,8 +71,13 @@ MEDIA_PROTOCOL = "1.4"
 #: mislabelled (#829), so this string is load-bearing.
 UTTERANCE_MIME = "audio/wav"
 
+#: Reply audio is pcm16 at 24 kHz mono -- the only format OpenAI emits
+#: while streaming.  Used to report a spoken reply's LENGTH, since its
+#: words do not arrive as text.
+SPEECH_BYTES_PER_SECOND = 24000 * 2
 
-def playback_sink(player: PulsePlayer):
+
+def playback_sink(player: PulsePlayer, meter: Dict[str, int]):
     """Adapt ``on_media`` events to the player, one stream at a time.
 
     The mirror of ``speech_sink`` in run_cascade.py, which collects to a
@@ -71,7 +85,9 @@ def playback_sink(player: PulsePlayer):
     conversation that arrives as a WAV afterwards is not a conversation.
     """
     def _sink(ev) -> None:
-        player.feed(ev.stream_id, ev.mime_type, base64.b64decode(ev.data_b64))
+        payload = base64.b64decode(ev.data_b64)
+        meter["bytes"] += len(payload)
+        player.feed(ev.stream_id, ev.mime_type, payload)
         if ev.final:
             player.finish(ev.stream_id)
     return _sink
@@ -80,24 +96,41 @@ def playback_sink(player: PulsePlayer):
 async def answer(session, wav: bytes) -> str:
     """Hand one utterance to the model and let it speak the reply.
 
+    ``ask`` rather than ``complete``: one call is one TURN, and this
+    session runs many of them.  ``complete`` waits for the session to
+    terminate, which is right for a one-shot stage and wrong here --
+    the `voice` profile declares no completion schema precisely so the
+    session survives the reply and remembers it.
+
     The prompt is EMPTY, and that is the point: the question IS the
     attachment.  A text prompt beside it would be a second question the
-    persona has to choose between.  This form used to be discarded
-    silently while reporting a completed turn (#838); it is the natural
-    call and it is now the one made.
+    persona has to choose between.  It is also the only way in: neither
+    `session.wake` nor `inject_prompt` carries an attachment (#845), so
+    audio reaches a live session through ``send_message`` or not at all.
     """
     player = PulsePlayer()
+    meter = {"bytes": 0}
     try:
-        payload = await session.complete(
+        text = await session.ask(
             "",
             attachments=[{"mime_type": UTTERANCE_MIME,
                           "data": wav,
                           "display_name": "utterance.wav"}],
-            on_media=playback_sink(player),
+            on_media=playback_sink(player, meter),
         )
     finally:
         player.finish_all()
-    return (payload or {}).get("spoken", "")
+    # A spoken turn usually returns NO text.  The provider builds the
+    # transcript and attaches it to the response AFTER streaming
+    # (`ensure_spoken_part`), so it reaches history -- the model
+    # remembers what it said -- but it is never streamed as output
+    # tokens, and no AGENT_OUTPUT event carries it.  Measured: 14 media
+    # chunks / 5.45s of speech, one AGENT_OUTPUT, `source='user'`, empty.
+    #
+    # So the reply is REPORTED, not transcribed.  The listener heard it;
+    # inventing a transcript here would mean transcribing our own audio
+    # to narrate something the person already has.
+    return text.strip() or f"(spoke {meter['bytes'] / SPEECH_BYTES_PER_SECOND:.1f}s)"
 
 
 async def main() -> int:
@@ -150,8 +183,8 @@ async def main() -> int:
                     mic.raise_if_faulted()    # surface a dead half promptly
                     continue
                 print(f"  heard {len(wav)} bytes; asking...", flush=True)
-                spoken = await answer(session, wav)
-                print(f"  said: {spoken or '(nothing)'}", flush=True)
+                said = await answer(session, wav)
+                print(f"  said: {said.strip() or '(nothing)'}", flush=True)
                 if args.once:
                     return 0
     except KeyboardInterrupt:
