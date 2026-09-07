@@ -1,0 +1,50 @@
+name: voice
+# Inherits the SPEAKER base for the same reason `duet` does: the stage
+# contract is identical, and the only thing this scenario changes is the
+# tier's modality DIRECTION.
+inherits: [_base_speaker]
+description: You speak to it and it speaks back — one tier, both directions.
+plugins: []
+
+# Required at top level even though the tier declares both (#822).
+model: openai/gpt-audio-mini
+provider: openrouter
+
+model_tiers:
+  # One tier that both HEARS and SPEAKS.  `bidirectional` is not two
+  # roles bolted together: outbound makes the daemon ask for
+  # `modalities: [text, audio]` on the request, inbound is what lets an
+  # `audio/*` attachment reach the wire as an `input_audio` block
+  # instead of being withheld (#830).  Declaring only `outbound` here
+  # would leave the model speaking into a room it cannot hear.
+  #
+  # `executor` because tier names are a closed set (dispatcher |
+  # executor | planner | vision).  Only `vision` carries an implicit
+  # modality role; every other tier must say so with this key, which is
+  # exactly what this line does.
+  executor:
+    model: openai/gpt-audio-mini
+    provider: openrouter
+    modalities: {audio: bidirectional}
+    description: 'hears the question as audio and answers out loud'
+  initial: executor
+  fallback: executor
+
+env:
+  JAATO_OPENROUTER_API_KEY: pass://jaato/openrouter/api-key
+
+plugin_configs:
+  openrouter:
+    api_key: "${JAATO_OPENROUTER_API_KEY}"
+    framework_overrides:
+      # ASSERTS what the model can emit.  No catalog in the tree reports
+      # output modalities, so without this the floor stays text-only and
+      # the tier's outbound role is refused at startup — which is exactly
+      # how this profile failed the first time it ran.
+      output_modalities: [text, audio]
+    api_params:
+      # NO temperature — see speaker.yaml: 0.0 makes this model loop
+      # catastrophically (818s of speech for a one-sentence answer).
+      audio:
+        voice: alloy
+        format: pcm16
