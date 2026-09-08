@@ -1,6 +1,6 @@
 # jaato-cascade-audio-interchange
 
-**You phone an insurance company. Esteban answers, listens to your
+**You phone an insurance company. Cristina answers, listens to your
 problem, finds your policy in their systems, takes the parte, and reads
 you back an expediente number — out loud, both directions, one session.**
 
@@ -139,7 +139,7 @@ an `audio/*` attachment reach the wire as an `input_audio` block. A tier
 that declares only outbound speaks into a room it cannot hear.
 
 **Persona, domain knowledge and systems are three different files.**
-Who Esteban is lives in `.jaato/agents/helpdesk.md`; what a claim intake
+Who Cristina is lives in `.jaato/agents/helpdesk.md`; what a claim intake
 requires lives in `.jaato/knowledge/siniestro_intake.md`; the systems he
 consults are described in `.jaato/services/lineadirecta/`. Each changes
 for its own reason, and a second persona on the same domain reuses the
@@ -303,7 +303,7 @@ Grouped by what a file is for, since the repo now holds five scenarios.
 | Path | What it is |
 |------|-----------|
 | `.jaato/profiles/openrouter_gpt_audio_mini/helpdesk.yaml` | Two tiers: `voice` hears and speaks, `soporte` consults |
-| `.jaato/agents/helpdesk.md` | Esteban — who he is and how he runs a call |
+| `.jaato/agents/helpdesk.md` | Cristina — who she is and how she runs a call |
 | `.jaato/knowledge/siniestro_intake.md` | What a claim intake requires — the domain, not the persona |
 | `.jaato/scripts/knowledge.py` | Pulls that file into the prompt at session prep |
 | `.jaato/services/lineadirecta/` | The service catalog, as the model sees it |
@@ -395,11 +395,11 @@ audio, in both directions.
 ## The helpdesk scenario
 
 `run_voice.py --greet --agent helpdesk` makes the agent answer the
-phone. It is Esteban, of a simulated Línea Directa Aseguradora customer
+phone. It is Cristina, of a simulated Línea Directa Aseguradora customer
 line, and he speaks BEFORE the first press:
 
 > «Buenos días, bienvenido a la línea de atención al cliente de Línea
-> Directa Aseguradora. Me llamo Esteban, ¿en qué puedo ayudarle?»
+> Directa Aseguradora. Me llamo Cristina, ¿en qué puedo ayudarle?»
 
 Then you press, ask, and he answers — the order a real call has, which
 is why the greeting is not just another turn in the loop.
@@ -530,12 +530,12 @@ Ctrl-C ends the call and prints a timestamped record of it, then saves
 it under `out/call-<when>.txt`:
 
 ```
-  00:00.00  ESTEBAN  (spoke 6.7s)
+  00:00.00  CRISTINA  (spoke 6.7s)
   00:11.20  caller   spoke for 2.0s
   00:11.20  system   calls enter_tier({'tier': 'soporte'})
   00:13.60  system   calls call_service({'endpoint': 'buscar-poliza'})
   00:14.10  system   call_service returned ok {'titular': '…'}
-  00:23.40  ESTEBAN  He encontrado su póliza, es la LD-2026-…   [9.5s]
+  00:23.40  CRISTINA  He encontrado su póliza, es la LD-2026-…   [9.5s]
   00:41.00  caller   press dropped after 0.4s — discarded
 ```
 
@@ -545,7 +545,7 @@ consulted, and whether a press was dropped or refused. Ctrl-C used to
 escape as a traceback, burying whatever had just happened under a stack
 describing none of it.
 
-**Esteban's side carries his actual words.** The final media chunk of a
+**Cristina's side carries her actual words.** The final media chunk of a
 spoken turn carries that utterance's transcript (#869) — the provider's
 own words for the audio it emitted, not either tier's account of what it
 meant to say. That distinction matters here: what `soporte` asks for and
@@ -571,7 +571,7 @@ answering the caller instead of writing down what they said.
 
 ### Where the domain knowledge lives, and where it should live
 
-Esteban follows a real intake script — is anyone hurt, then policy
+Cristina follows a real intake script — is anyone hurt, then policy
 number and DNI and plate, then the facts, then the other driver, then
 the 7-day deadline. That script is not in the persona. It sits in
 `.jaato/knowledge/siniestro_intake.md` and is pulled into the prompt at

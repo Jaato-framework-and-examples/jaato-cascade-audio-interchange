@@ -346,7 +346,7 @@ async def main() -> int:
     args = parser.parse_args()
 
     # A SCENARIO picks profile, persona and opening together, because
-    # they are not independent: `helpdesk` needs Esteban AND the tiers
+    # they are not independent: `helpdesk` needs Cristina AND the tiers
     # that let him consult the systems.  Choosing them separately is a
     # trap -- `--agent helpdesk` alone ran the helpdesk PERSONA against
     # the plain `voice` profile, which has no planner tier and no
@@ -408,7 +408,7 @@ async def main() -> int:
                 print("  opening the call...", flush=True)
                 said = await speak(session, OPENING_CUE)
                 print(f"  said: {said}", flush=True)
-                transcript.add("ESTEBAN", said)
+                transcript.add("CRISTINA", said)
             while True:
                 try:
                     wav = await asyncio.to_thread(inbox.get, True, 0.5)
@@ -431,7 +431,7 @@ async def main() -> int:
                     print(f"  heard: {heard_words}", flush=True)
                 print(f"  said: {said.strip() or '(nothing)'}", flush=True)
                 transcript.add(
-                    "ESTEBAN",
+                    "CRISTINA",
                     f"{said.strip() or '(nothing)'}"
                     f"   [after {time.monotonic() - asked:.1f}s]")
                 if args.once:
