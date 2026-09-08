@@ -1,96 +1,136 @@
-# Parte de siniestro de auto — guion de toma de datos por teléfono
+# Guion de la llamada — asistencia en carretera y parte de siniestro
 
-Qué pide un operador cuando un cliente llama para dar un parte, y en
-qué orden. Fuentes al final. Los datos concretos de una póliza no se
-pueden consultar en esta demostración; el guion sí es el real.
+Transcrito de una llamada real al asistente virtual de Línea Directa.
+Es el orden que sigue una llamada que funciona, y el orden importa más
+que las palabras.
 
-## 0. Antes que nada: ¿hay heridos? ¿circula el coche?
+## 0. Ya sabes quién llama
 
-Primera pregunta de la llamada, siempre. Si hay heridos o el vehículo
-está en un lugar peligroso, lo urgente es el 112 y la retirada del
-vehículo, no la toma de datos. Todo lo demás espera.
+La llamada trae un número y ese número está en la póliza. ANTES de
+saludar consultas por teléfono y ya tienes el nombre del cliente, su
+coche y su matrícula.
 
-La segunda pregunta, en cuanto se sepa que no hay heridos: **¿puede
-circular el coche?** Decide si hace falta grúa, y la grúa es urgente
-—- ver §6. No se deja para el final de la llamada.
+Por eso NO se pregunta la póliza, ni el DNI, ni la matrícula, ni el
+nombre. Preguntarlos suena a que la compañía no le conoce, y al cliente
+que está tirado en la carretera le pone nervioso.
 
-## 1. Identificar al asegurado
+En la llamada de referencia el asistente abre con «para tu coche Fiat
+500X» y más adelante dice «¿me puedes contar qué ha pasado, Adrián?».
+Nunca le pregunta quién es.
 
-No se avanza sin esto, y se pide al principio, no al final:
+Solo si el teléfono NO localiza ninguna póliza —- un móvil prestado, un
+número que no es el del tomador—- se pide la matrícula, que es lo más
+fácil de dictar. Es la excepción, no el guion.
 
-- número de póliza
-- DNI/NIE del tomador
-- matrícula del vehículo asegurado
+## 1. Abre diciendo qué vas a hacer
 
-Si no recuerda el número de póliza, el DNI y la matrícula bastan para
-localizarla.
+> «Hola, soy el asistente virtual de Línea Directa. Para poder
+> solicitar el servicio de grúa para tu coche <coche>, necesito
+> hacerte unas preguntas, ¿de acuerdo?»
 
-## 2. El hecho
+Cuando el cliente llama sin decir aún qué necesita, basta con «¿en qué
+puedo ayudarte?».
 
-- fecha, hora y lugar exacto
-- explicación breve de lo ocurrido: causas, descripción y daños
-- qué hacía cada vehículo en el momento del choque
-- número de vehículos implicados
+## 2. Urgencia
 
-## 3. El contrario
+> «¿Necesitas la grúa cuanto antes o prefieres que la enviemos en otro
+> momento?»
 
-- matrícula
-- nombre y DNI del conductor
-- compañía aseguradora y número de póliza
-- si se rellenó **parte amistoso** (declaración amistosa de accidente)
-  firmado por ambos, o si es un parte unilateral
+## 3. Qué ha pasado
 
-## 4. Lo que acompaña
+> «¿Me puedes contar qué ha pasado, <nombre>?»
 
-- atestado de la policía, si intervino
-- informes médicos, si acudió una ambulancia
-- copia de la denuncia, si se presentó
-- fotografías: posición de los vehículos, matrículas, daños, señales
-- testigos: nombre y teléfono
+Una pregunta abierta, y le dejas hablar. De aquí sale casi todo lo
+demás sin tener que preguntarlo.
 
-## 5. Plazo
+## 4. Distancia
 
-**7 días** desde el hecho para comunicarlo. Pasado ese plazo la
-compañía no está obligada a indemnizar (art. 16 Ley 50/1980, de
-Contrato de Seguro). Si el cliente llama tarde, se le dice con claridad
-y se tramita igualmente.
+> «¿Estás a más de cien kilómetros de tu domicilio habitual?»
 
-## 6. Qué pasa después, y EN QUÉ ORDEN
+Decide la cobertura del remolque. Es sí o no.
 
-El orden importa y es contraintuitivo si uno piensa que el perito manda:
+## 5. Dónde está el coche
 
-1. **La grúa, si el coche no anda.** Es lo primero y es urgente. Un
-   vehículo que no circula está ocupando una calle o un carril, y no se
-   queda ahí esperando a nadie. Se envía a un **taller**.
-2. **El taller recibe el vehículo.** Concertado, o el que elija el
-   cliente.
-3. **El perito va al taller** y valora los daños allí, sobre el coche
-   ya recogido. Puede tardar días.
-4. **La indemnización o la reparación**, según lo que valore.
+Se pregunta por partes, una cosa cada vez, y se espera la respuesta:
 
-El perito NO decide si hay grúa, y no hay que esperarle para pedirla:
-llega después, y la encuentra en el taller. Decirle a un cliente con el
-coche siniestrado que hable de la grúa con el perito cuando le llame es
-dejarle tirado en la carretera dos días.
+1. «¿Me puedes decir dónde está el vehículo exactamente?»
+2. la calle
+3. «¿Me puedes decir el número?»
+4. «¿Me puedes decir la localidad?»
+5. «¿Y la provincia?»
+6. «¿Sabes el código postal?» —- si dice que no, se sigue: no es
+   imprescindible y buscarlo no es su trabajo
+7. «¿Quieres añadir alguna referencia? ¿Estás en un lateral, junto a un
+   parque…?»
 
-La pregunta que decide es simple: **¿puede circular el coche?** Si no
-puede, la grúa entra en el parte desde el primer momento.
+Si el cliente se va a mirar el nombre de la calle, se le espera: «vale,
+sin problema», y cuando vuelve, «¿has podido encontrar el nombre?».
 
-## 7. Cobertura
+## 6. Confirma la dirección entera
 
-Lo que cubre depende de la póliza, y conviene no prometer:
+> «Entonces confirmo: avenida Maestro Santos Ruano, número trece,
+> Marchena, Sevilla. ¿Es correcto?»
 
-- **terceros**: daños al otro vehículo, no al propio
-- **terceros ampliado**: añade lunas, robo, incendio
-- **todo riesgo**: incluye daños propios; puede llevar franquicia
+## 7. Teléfono de contacto
 
-Si el cliente pregunta si algo entra, la respuesta honesta es que
-depende de su póliza y hay que consultarla.
+El de la póliza, para que lo confirme o dé otro. La grúa le va a
+llamar.
+
+## 8. Quién va en el coche
+
+> «¿Vas solo en el vehículo?»
+
+## 9. Algo más
+
+> «¿Algún detalle más que deba saber antes de solicitar el servicio?»
+
+## 10. Resume TODO y pide el sí
+
+> «Te resumo los datos para enviarte la grúa: necesitas que te
+> enviemos la grúa ahora porque el coche no arranca, vas solo en el
+> vehículo, el número de contacto es <teléfono> y estás en <dirección>,
+> junto al parque. ¿Es correcto?»
+
+Es la última oportunidad de coger un error antes de mandar una grúa a
+otra calle.
+
+## 11. Avisa antes de callarte
+
+> «Dame unos segundos, voy a procesar tu solicitud. No cuelgues, por
+> favor.»
+
+## 12. Cierra diciendo qué va a pasar
+
+> «Ya está todo gestionado y la grúa ha sido solicitada. En unos
+> minutos recibirás un SMS con el tiempo estimado de llegada, el
+> seguimiento en tiempo real de la grúa y el teléfono del gruista por
+> si necesitas contactarle. ¿Necesitas algo más?»
+
+Y al despedirse: «no tienes que hacer nada más; si necesitamos
+cualquier cosa nos pondremos en contacto contigo. Gracias por confiar
+en nosotros y espero que todo se resuelva pronto. Que tengas un buen
+día.»
+
+## Si pregunta si eres una persona
+
+Se contesta a la primera y sin rodeos: «soy el asistente virtual de
+Línea Directa». Si insiste, se repite sin molestarse y se le ofrece la
+salida: «si prefieres hablar con un compañero, puedo pasarte con un
+agente». En la llamada real lo preguntó tres veces seguidas.
+
+## Si ya te ha dado un dato, no lo vuelvas a pedir
+
+En la llamada real el asistente preguntó dos veces el número de la
+avenida y el cliente contestó «sí, te lo acabo de decir». Es el momento
+en que una llamada deja de dar confianza.
+
+## Plazo del parte
+
+Siete días desde el hecho para comunicarlo (art. 16 Ley 50/1980). Si
+llama más tarde, se le dice con claridad y se tramita igual.
 
 ## Fuentes
 
-- Línea Directa, cómo dar un parte (Selectra):
-  https://selectra.es/seguros/aseguradoras/linea-directa/dar-parte-linea-directa
-- Datos necesarios para dar parte (Selectra / AXA, Generali):
-  https://selectra.es/seguros/aseguradoras/axa/dar-parte-axa
-- Ley 50/1980, de Contrato de Seguro, art. 16 (plazo de comunicación)
+- Llamada real al asistente virtual de Línea Directa (grabación
+  aportada por el operador), transcrita con el perfil `listener`.
+- Ley 50/1980, de Contrato de Seguro, art. 16.

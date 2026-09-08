@@ -128,7 +128,19 @@ def playback_sink(player: PulsePlayer, meter: Dict[str, int],
 #: the persona, not to the driver -- and this only tells it that the
 #: line is now open.  Square brackets and the third person keep it
 #: readable as direction rather than as something to say aloud.
-OPENING_CUE = "[La llamada se ha establecido. El cliente está a la escucha.]"
+#: The number the call arrives from. A real line has caller ID and
+#: knows its customer before it says hello -- the reference recording
+#: opens with "para tu coche Fiat 500X", never asking who is calling.
+#: Without this the agent has to interrogate a stranded driver for a
+#: policy number, which is what made the demo feel like a form.
+#:
+#: One of the mock's demo customers; `--from` overrides it, and a
+#: number that matches nobody exercises the fallback where the agent
+#: does have to ask.
+CALLER_PHONE = "615071573"
+
+OPENING_CUE = ("[La llamada entra desde el número {phone}. El cliente está "
+               "a la escucha.]")
 
 
 class Transcript:
@@ -330,6 +342,10 @@ async def main() -> int:
         description="Speak to the agent; it speaks back.")
     parser.add_argument("--once", action="store_true",
                         help="handle one utterance and exit")
+    parser.add_argument("--from", dest="caller", default=CALLER_PHONE,
+                        metavar="PHONE",
+                        help="the number the call arrives from (default: a "
+                             "demo customer; an unknown one makes the agent ask)")
     parser.add_argument("--no-transcribe", action="store_true",
                         help="skip the parallel listener that writes down "
                              "what the CALLER said (it costs tokens, not time)")
@@ -384,6 +400,7 @@ async def main() -> int:
         return 2
 
     print(f"scenario {args.scenario}: profile={profile} agent={agent}"
+          f" · llamada desde {args.caller}"
           f"{' (agent opens the call)' if greet else ''}", flush=True)
     print("listening — hold the push-to-talk key and speak (Ctrl-C to stop)",
           flush=True)
@@ -406,9 +423,10 @@ async def main() -> int:
             # reason it is not just another turn in the loop.
             if greet:
                 print("  opening the call...", flush=True)
-                said = await speak(session, OPENING_CUE)
+                said = await speak(
+                    session, OPENING_CUE.format(phone=args.caller))
                 print(f"  said: {said}", flush=True)
-                transcript.add("CRISTINA", said)
+                transcript.add("ASISTENTE", said)
             while True:
                 try:
                     wav = await asyncio.to_thread(inbox.get, True, 0.5)
@@ -431,7 +449,7 @@ async def main() -> int:
                     print(f"  heard: {heard_words}", flush=True)
                 print(f"  said: {said.strip() or '(nothing)'}", flush=True)
                 transcript.add(
-                    "CRISTINA",
+                    "ASISTENTE",
                     f"{said.strip() or '(nothing)'}"
                     f"   [after {time.monotonic() - asked:.1f}s]")
                 if args.once:

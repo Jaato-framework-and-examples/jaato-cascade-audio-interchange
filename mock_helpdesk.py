@@ -38,14 +38,28 @@ PORT = int(os.environ.get("JAATO_HELPDESK_PORT", "8731"))
 #: not demonstrating a lookup.
 POLIZAS = [
     {"poliza": "LD-2026-004417", "titular": "Daniel Alonso Gázquez",
+     "nombre": "Daniel", "telefono": "615071573",
      "dni": "51234567A", "matricula": "4417-KDN",
      "vehiculo": "Seat León 1.5 TSI (2021)",
      "cobertura": "todo_riesgo", "franquicia": 300.0, "alta": "2021-03-14"},
     {"poliza": "LD-2026-008842", "titular": "María Serrano Gil",
+     "nombre": "María", "telefono": "622334455",
      "dni": "52345678B", "matricula": "8842-LPT",
      "vehiculo": "Renault Clio 1.0 TCe (2019)",
      "cobertura": "terceros_ampliado", "franquicia": 0.0, "alta": "2019-09-02"},
 ]
+
+
+def _phone(value: str) -> str:
+    """A Spanish mobile, however it was written or dictated.
+
+    Drops spaces and punctuation, then the country code: a call can
+    present as `615071573`, `615 07 15 73` or `+34 615 071 573` and they
+    are one number. Comparing them literally is how a line fails to
+    recognise its own customer.
+    """
+    digits = "".join(ch for ch in (value or "") if ch.isdigit())
+    return digits[2:] if digits.startswith("34") and len(digits) > 9 else digits
 
 
 def _norm(value: str) -> str:
@@ -62,18 +76,25 @@ def _norm(value: str) -> str:
 def buscar_poliza(query, body):
     """GET /v1/polizas?poliza=…&dni=…&matricula=… — any key locates it.
 
-    Three keys because a caller has three different things to hand, and
-    the plate is the easiest of them to say down a telephone: four
-    digits and three letters, against eight digits for a DNI and a
-    dozen characters for a policy number.  A real operator asks for
-    whichever the caller can actually produce.
+    FOUR keys, and the first one is the one that matters: a call arrives
+    with a number attached, so a real insurance line knows who is
+    calling before it says hello.  The reference recording opens with
+    "para tu coche Fiat 500X" and "que ha pasado, Adrian" -- it never
+    asks who he is, because it already knows.
+
+    The other three are for when that fails: a borrowed phone, a number
+    not on the policy, a caller ringing about someone else's car.  Then
+    the plate is the easiest to say aloud -- four digits and three
+    letters, against eight for a DNI.
     """
-    keys = {k: _norm((query.get(k) or [""])[0])
-            for k in ("poliza", "dni", "matricula")}
+    keys = {k: (_phone if k == "telefono" else _norm)(
+                (query.get(k) or [""])[0])
+            for k in ("poliza", "dni", "matricula", "telefono")}
     if not any(keys.values()):
-        return 400, {"error": "indique_poliza_dni_o_matricula"}
+        return 400, {"error": "indique_telefono_matricula_poliza_o_dni"}
     for row in POLIZAS:
-        if any(value and _norm(row[key]) == value
+        if any(value and (_phone(row[key]) if key == "telefono"
+                          else _norm(row[key])) == value
                for key, value in keys.items()):
             return 200, row
     return 404, {"error": "poliza_no_encontrada",
