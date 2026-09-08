@@ -2,8 +2,10 @@ method: GET
 path: /v1/polizas
 summary: Localizar la póliza del cliente
 description: >
-  Busca por número de póliza O por DNI.  Basta uno de los dos: si el
-  cliente no recuerda el número, el DNI lo localiza igual.  Devuelve el
+  Busca por número de póliza, por DNI o por matrícula.  Basta UNO
+  cualquiera de los tres: si el cliente no recuerda el número de
+  póliza, el DNI o la matrícula lo localizan igual.  La matrícula suele
+  ser el dato más fácil de dictar por teléfono.  Devuelve el
   titular, el vehículo y la cobertura contratada.
 parameters:
 - name: poliza
@@ -16,6 +18,14 @@ parameters:
   type: string
   required: false
   description: DNI o NIE del tomador (8 dígitos y letra)
+- name: matricula
+  in: query
+  type: string
+  required: false
+  description: >
+    Matrícula del vehículo asegurado (formato NNNN-LLL).  Se compara
+    ignorando espacios, guiones y mayúsculas, porque llega dictada de
+    viva voz: «4417 KDN» y «4417-KDN» localizan la misma póliza.
 responses:
   '200':
     description: Póliza localizada

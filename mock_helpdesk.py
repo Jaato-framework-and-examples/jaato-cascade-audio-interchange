@@ -60,17 +60,24 @@ def _norm(value: str) -> str:
 
 
 def buscar_poliza(query, body):
-    """GET /v1/polizas?poliza=…&dni=… — either key locates it."""
-    poliza = _norm((query.get("poliza") or [""])[0])
-    dni = _norm((query.get("dni") or [""])[0])
-    if not poliza and not dni:
-        return 400, {"error": "indique_poliza_o_dni"}
+    """GET /v1/polizas?poliza=…&dni=…&matricula=… — any key locates it.
+
+    Three keys because a caller has three different things to hand, and
+    the plate is the easiest of them to say down a telephone: four
+    digits and three letters, against eight digits for a DNI and a
+    dozen characters for a policy number.  A real operator asks for
+    whichever the caller can actually produce.
+    """
+    keys = {k: _norm((query.get(k) or [""])[0])
+            for k in ("poliza", "dni", "matricula")}
+    if not any(keys.values()):
+        return 400, {"error": "indique_poliza_dni_o_matricula"}
     for row in POLIZAS:
-        if (poliza and _norm(row["poliza"]) == poliza) or \
-           (dni and _norm(row["dni"]) == dni):
+        if any(value and _norm(row[key]) == value
+               for key, value in keys.items()):
             return 200, row
     return 404, {"error": "poliza_no_encontrada",
-                 "buscado": {"poliza": poliza or None, "dni": dni or None}}
+                 "buscado": {k: v or None for k, v in keys.items()}}
 
 
 def abrir_siniestro(query, body):
