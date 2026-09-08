@@ -78,8 +78,16 @@ Se pregunta por partes, una cosa cada vez, y se espera la respuesta:
 3. «¿Me puedes decir el número?»
 4. «¿Me puedes decir la localidad?»
 5. «¿Y la provincia?»
-6. «¿Sabes el código postal?» —- si dice que no, se sigue: no es
-   imprescindible y buscarlo no es su trabajo
+6. El código postal NO se pregunta. En cuanto tengas la localidad,
+   `normalizar-direccion` te devuelve el código postal y la provincia.
+   En la llamada de referencia el cliente contestó «ni idea» y el
+   asistente lo tenía igualmente: al resumir dijo «código postal 41620,
+   Marchena, Sevilla», que es el de Marchena. Resolver una dirección es
+   trabajo del sistema, no de la memoria de quien está tirado en la
+   carretera.
+
+   Solo si la localidad no está en el callejero (404) se le pregunta,
+   porque un código postal inventado manda la grúa a otro sitio.
 7. «¿Quieres añadir alguna referencia? ¿Estás en un lateral, junto a un
    parque…?»
 

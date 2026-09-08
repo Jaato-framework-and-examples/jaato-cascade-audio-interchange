@@ -427,6 +427,7 @@ can call them:
 | Operation | What it does |
 |-----------|--------------|
 | `buscar-poliza` | `GET /v1/polizas?matricula=…` / `?poliza=…` / `?dni=…` — any ONE locates the customer |
+| `normalizar-direccion` | `GET /v1/direcciones?localidad=…` — completes the address, so the postcode is never asked for |
 | `abrir-siniestro` | `POST /v1/siniestros` — registers the parte, returns the expediente number |
 
 ```

@@ -1,0 +1,43 @@
+method: GET
+path: /v1/direcciones
+summary: Completar y validar una dirección
+description: >
+  Devuelve la dirección completa a partir de lo que el cliente haya
+  podido decir.  Sirve para NO preguntarle lo que el sistema ya sabe:
+  el código postal sale de la localidad, y la provincia también.  Se
+  llama en cuanto se tenga la localidad, antes de confirmarle la
+  dirección en voz alta.
+parameters:
+- name: localidad
+  in: query
+  type: string
+  required: true
+  description: Población, tal como la diga el cliente. Se compara sin acentos ni mayúsculas.
+- name: calle
+  in: query
+  type: string
+  required: false
+  description: Nombre de la vía, si lo ha dado
+- name: numero
+  in: query
+  type: string
+  required: false
+  description: Número, si lo ha dado
+responses:
+  '200':
+    description: Dirección resuelta
+    schema:
+      type: object
+      properties:
+        calle: {type: string}
+        numero: {type: string}
+        localidad: {type: string}
+        provincia: {type: string}
+        codigo_postal:
+          type: string
+          description: Resuelto a partir de la localidad; el cliente no tiene por qué saberlo
+  '404':
+    description: >
+      La localidad no está en el callejero.  Entonces SÍ se le pregunta
+      al cliente, porque inventar un código postal manda la grúa a otro
+      sitio.

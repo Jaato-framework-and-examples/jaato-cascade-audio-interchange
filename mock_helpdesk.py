@@ -120,9 +120,54 @@ def abrir_siniestro(query, body):
     }
 
 
+#: What an address service knows.  A real one covers the country; this
+#: holds the towns the demo uses, because a mock that invented a
+#: postcode for any input would be teaching the agent to trust made-up
+#: data -- which is the failure this whole persona is written against.
+CALLEJERO = [
+    {"localidad": "Marchena", "provincia": "Sevilla", "cp": "41620"},
+    {"localidad": "Sevilla", "provincia": "Sevilla", "cp": "41001"},
+    {"localidad": "Madrid", "provincia": "Madrid", "cp": "28001"},
+    {"localidad": "Getafe", "provincia": "Madrid", "cp": "28901"},
+    {"localidad": "Alcalá de Henares", "provincia": "Madrid", "cp": "28801"},
+]
+
+
+def _fold(text: str) -> str:
+    """Compare town names as they are SAID, not as they are spelled."""
+    import unicodedata
+    plain = unicodedata.normalize("NFKD", (text or "").lower())
+    return "".join(c for c in plain if c.isalnum())
+
+
+def normalizar_direccion(query, body):
+    """GET /v1/direcciones?localidad=…&calle=…&numero=…
+
+    Completes what the caller could not supply.  In the reference
+    recording the caller answered "ni idea" to the postcode and the
+    assistant simply had it -- resolving an address is the service's
+    job, not the customer's memory.
+    """
+    localidad = _fold((query.get("localidad") or [""])[0])
+    if not localidad:
+        return 400, {"error": "indique_localidad"}
+    for row in CALLEJERO:
+        if _fold(row["localidad"]) == localidad:
+            return 200, {
+                "calle": (query.get("calle") or [""])[0] or None,
+                "numero": (query.get("numero") or [""])[0] or None,
+                "localidad": row["localidad"],
+                "provincia": row["provincia"],
+                "codigo_postal": row["cp"],
+            }
+    return 404, {"error": "localidad_no_encontrada",
+                 "buscado": (query.get("localidad") or [""])[0]}
+
+
 ROUTES = {
     ("GET", "/v1/polizas"): buscar_poliza,
     ("POST", "/v1/siniestros"): abrir_siniestro,
+    ("GET", "/v1/direcciones"): normalizar_direccion,
 }
 
 

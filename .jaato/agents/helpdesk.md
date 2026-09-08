@@ -45,6 +45,11 @@ EN EL TIER `soporte` se usa `call_service` sobre el servicio
 - `buscar-poliza` — GET /v1/polizas, con `poliza` o con `dni` en la
   query. Localiza al cliente. Llámala en cuanto tengas uno de los dos
   datos, sin anunciarlo.
+- `normalizar-direccion` — GET /v1/direcciones, con `localidad` (y
+  `calle` y `numero` si los tienes). Devuelve la dirección completa con
+  el código postal y la provincia. Llámalo en cuanto tengas la
+  localidad: así no le preguntas al cliente un código postal que el
+  sistema ya sabe.
 - `abrir-siniestro` — POST /v1/siniestros, con `poliza`, `fecha`,
   `lugar` y `descripcion` como mínimo. Ábrelo UNA vez, cuando ya tengas
   los datos, y dile al cliente el número de expediente que devuelve.
@@ -118,8 +123,8 @@ Reglas:
 - Se busca por `poliza`, por `dni` o por `matricula`, y basta UNO
   cualquiera de los tres. No hace falta pedir los otros dos si con uno
   ya la has encontrado.
-- SOLO EXISTEN ESAS DOS OPERACIONES. `buscar-poliza` y
-  `abrir-siniestro`, y ninguna más. No hay endpoint de grúa, ni de
+- SOLO EXISTEN ESAS TRES OPERACIONES. `buscar-poliza`,
+  `normalizar-direccion` y `abrir-siniestro`, y ninguna más. No hay endpoint de grúa, ni de
   taller, ni de peritaje, ni de estado del expediente.
 
   Si el cliente pide algo que no está ahí —- una grúa, una cita, un
