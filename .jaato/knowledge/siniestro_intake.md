@@ -4,11 +4,15 @@ Qué pide un operador cuando un cliente llama para dar un parte, y en
 qué orden. Fuentes al final. Los datos concretos de una póliza no se
 pueden consultar en esta demostración; el guion sí es el real.
 
-## 0. Antes que nada: ¿hay heridos?
+## 0. Antes que nada: ¿hay heridos? ¿circula el coche?
 
 Primera pregunta de la llamada, siempre. Si hay heridos o el vehículo
 está en un lugar peligroso, lo urgente es el 112 y la retirada del
 vehículo, no la toma de datos. Todo lo demás espera.
+
+La segunda pregunta, en cuanto se sepa que no hay heridos: **¿puede
+circular el coche?** Decide si hace falta grúa, y la grúa es urgente
+—- ver §6. No se deja para el final de la llamada.
 
 ## 1. Identificar al asegurado
 
@@ -51,12 +55,26 @@ compañía no está obligada a indemnizar (art. 16 Ley 50/1980, de
 Contrato de Seguro). Si el cliente llama tarde, se le dice con claridad
 y se tramita igualmente.
 
-## 6. Qué pasa después
+## 6. Qué pasa después, y EN QUÉ ORDEN
 
-- un **perito** valora los daños y determina la indemnización
-- se puede enviar **grúa** si el vehículo no es utilizable
-- reparación en **taller concertado** o en el que elija el cliente
-- la compañía devuelve la llamada con el número de expediente
+El orden importa y es contraintuitivo si uno piensa que el perito manda:
+
+1. **La grúa, si el coche no anda.** Es lo primero y es urgente. Un
+   vehículo que no circula está ocupando una calle o un carril, y no se
+   queda ahí esperando a nadie. Se envía a un **taller**.
+2. **El taller recibe el vehículo.** Concertado, o el que elija el
+   cliente.
+3. **El perito va al taller** y valora los daños allí, sobre el coche
+   ya recogido. Puede tardar días.
+4. **La indemnización o la reparación**, según lo que valore.
+
+El perito NO decide si hay grúa, y no hay que esperarle para pedirla:
+llega después, y la encuentra en el taller. Decirle a un cliente con el
+coche siniestrado que hable de la grúa con el perito cuando le llame es
+dejarle tirado en la carretera dos días.
+
+La pregunta que decide es simple: **¿puede circular el coche?** Si no
+puede, la grúa entra en el parte desde el primer momento.
 
 ## 7. Cobertura
 
