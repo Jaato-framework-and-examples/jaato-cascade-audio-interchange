@@ -514,6 +514,34 @@ permission:
       tools: [call_service]
 ```
 
+### Reading the call back
+
+Ctrl-C ends the call and prints a timestamped record of it, then saves
+it under `out/call-<when>.txt`:
+
+```
+  00:00.00  ESTEBAN  (spoke 6.7s)
+  00:11.20  caller   spoke for 2.0s
+  00:11.20  system   calls enter_tier({'tier': 'soporte'})
+  00:13.60  system   calls call_service({'endpoint': 'buscar-poliza'})
+  00:14.10  system   call_service returned ok {'titular': '…'}
+  00:23.40  ESTEBAN  (spoke 9.5s)   [after 11.3s]
+  00:41.00  caller   press dropped after 0.4s — discarded
+```
+
+It answers what the live output cannot: how long the caller waited
+between speaking and being answered, which systems were actually
+consulted, and whether a press was dropped or refused. Ctrl-C used to
+escape as a traceback, burying whatever had just happened under a stack
+describing none of it.
+
+**It records durations, not words.** A spoken turn returns no text — the
+provider builds its transcript after streaming and no event carries it —
+and nothing transcribes the caller at all. Rather than leave blanks that
+read like silence, the record says what it knows and marks what it
+doesn't. To recover the words, feed a captured WAV to the `listener`
+profile.
+
 ### Where the domain knowledge lives, and where it should live
 
 Esteban follows a real intake script — is anyone hurt, then policy

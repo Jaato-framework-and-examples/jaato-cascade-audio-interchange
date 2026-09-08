@@ -51,6 +51,8 @@ import base64
 import os
 import queue
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -58,7 +60,7 @@ from jaato_sdk import ClientType, EventType, IPCClient, SessionCreateFailed
 from jaato_sdk.client.convenience import AgentError
 from jaato_sdk.client.ipc import DEFAULT_SOCKET_PATH
 
-from ptt_capture import PushToTalkMic, SourceMuted, SignalLost
+from ptt_capture import BYTES_PER_SECOND, PushToTalkMic, SourceMuted, SignalLost
 from pulse_playback import PulsePlayer
 
 HERE = Path(__file__).resolve().parent
@@ -113,7 +115,51 @@ def playback_sink(player: PulsePlayer, meter: Dict[str, int]):
 OPENING_CUE = "[La llamada se ha establecido. El cliente está a la escucha.]"
 
 
-def trace_tools(session) -> None:
+class Transcript:
+    """A timestamped record of the call, printed when it ends.
+
+    The per-line output while a call runs is for watching; this is for
+    reading afterwards. It answers the questions a trace dump does not:
+    when did the caller speak and for how long, what did the agent
+    actually consult, how long did each reply take to arrive.
+
+    What it CANNOT hold is the words. A spoken turn returns no text --
+    the provider builds its transcript after streaming and no event
+    carries it -- and nothing transcribes the caller at all. So this
+    records durations, tool calls and whatever text a turn did return,
+    and says plainly where words are unavailable rather than leaving a
+    blank that reads like silence.
+    """
+
+    def __init__(self) -> None:
+        self._t0 = time.monotonic()
+        self._rows: list[tuple[float, str, str]] = []
+
+    def add(self, actor: str, detail: str) -> None:
+        self._rows.append((time.monotonic() - self._t0, actor, detail))
+
+    def render(self) -> str:
+        if not self._rows:
+            return "  (nothing happened)"
+        width = max(len(a) for _, a, _ in self._rows)
+        lines = []
+        for at, actor, detail in self._rows:
+            stamp = f"{int(at) // 60:02d}:{at % 60:05.2f}"
+            first, *rest = detail.splitlines() or [""]
+            lines.append(f"  {stamp}  {actor:<{width}}  {first}")
+            pad = " " * (10 + width + 2)
+            lines.extend(f"{pad}{line}" for line in rest)
+        return "\n".join(lines)
+
+    def write(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            f"# call transcript — {datetime.now().isoformat(timespec='seconds')}\n"
+            f"# mm:ss.ss from the start of the call\n\n{self.render()}\n",
+            encoding="utf-8")
+
+
+def trace_tools(session, transcript: "Transcript") -> None:
     """Print every tool call and permission decision as it happens.
 
     A voice demo is opaque in a way a text one is not: the audience
@@ -129,17 +175,23 @@ def trace_tools(session) -> None:
     """
     def _start(ev) -> None:
         args = getattr(ev, "arguments", None) or getattr(ev, "args", None) or ""
-        print(f"    -> {getattr(ev, 'tool_name', '?')}({str(args)[:110]})", flush=True)
+        name = getattr(ev, "tool_name", "?")
+        print(f"    -> {name}({str(args)[:110]})", flush=True)
+        transcript.add("system", f"calls {name}({str(args)[:160]})")
 
     def _end(ev) -> None:
         ok = getattr(ev, "success", None)
         mark = "ok" if ok is None or ok else "FAILED"
         result = str(getattr(ev, "result", "") or "")[:110]
-        print(f"    <- {getattr(ev, 'tool_name', '?')} {mark} {result}", flush=True)
+        name = getattr(ev, "tool_name", "?")
+        print(f"    <- {name} {mark} {result}", flush=True)
+        transcript.add("system", f"{name} returned {mark} {result[:160]}".rstrip())
 
     def _perm(ev) -> None:
-        print(f"    !! permission requested for {getattr(ev, 'tool_name', '?')} "
+        name = getattr(ev, "tool_name", "?")
+        print(f"    !! permission requested for {name} "
               f"— nothing here can answer it", flush=True)
+        transcript.add("system", f"PERMISSION REQUESTED for {name} — unanswerable here")
 
     session._client.subscribe(EventType.TOOL_CALL_START, _start)
     session._client.subscribe(EventType.TOOL_CALL_END, _end)
@@ -189,7 +241,8 @@ async def speak(session, prompt: str, wav: Optional[bytes] = None) -> str:
     # So the reply is REPORTED, not transcribed.  The listener heard it;
     # inventing a transcript here would mean transcribing our own audio
     # to narrate something the person already has.
-    return text.strip() or f"(spoke {meter['bytes'] / SPEECH_BYTES_PER_SECOND:.1f}s)"
+    seconds = meter["bytes"] / SPEECH_BYTES_PER_SECOND
+    return text.strip() or f"(spoke {seconds:.1f}s)"
 
 
 async def main() -> int:
@@ -227,15 +280,18 @@ async def main() -> int:
     # its own: a consumer slower than the speaker must refuse work, not
     # accumulate an ever-staler backlog.
     inbox: "queue.Queue[bytes]" = queue.Queue(maxsize=4)
+    transcript = Transcript()
 
     def on_utterance(u) -> None:
         if not u.complete:
             print("  (press dropped — discarded)", flush=True)
+            transcript.add("caller", f"press dropped after {u.seconds:.1f}s — discarded")
             return
         try:
             inbox.put_nowait(u.wav())
         except queue.Full:
             print("  (still answering — utterance refused)", flush=True)
+            transcript.add("caller", "spoke while the agent was still busy — REFUSED")
 
     try:
         mic = PushToTalkMic(on_utterance=on_utterance)
@@ -259,14 +315,16 @@ async def main() -> int:
                 profile=profile,
                 agent=agent,
         ) as session:
-            trace_tools(session)
+            trace_tools(session, transcript)
             # The agent answers the phone.  This happens BEFORE the mic
             # is read, so the caller hears the greeting and then decides
             # what to ask -- which is the order a real call has, and the
             # reason it is not just another turn in the loop.
             if greet:
                 print("  opening the call...", flush=True)
-                print(f"  said: {await speak(session, OPENING_CUE)}", flush=True)
+                said = await speak(session, OPENING_CUE)
+                print(f"  said: {said}", flush=True)
+                transcript.add("ESTEBAN", said)
             while True:
                 try:
                     wav = await asyncio.to_thread(inbox.get, True, 0.5)
@@ -274,11 +332,22 @@ async def main() -> int:
                     mic.raise_if_faulted()    # surface a dead half promptly
                     continue
                 print(f"  heard {len(wav)} bytes; asking...", flush=True)
+                spoken_for = (len(wav) - 44) / BYTES_PER_SECOND
+                transcript.add("caller", f"spoke for {spoken_for:.1f}s")
+                asked = time.monotonic()
                 said = await speak(session, "", wav)
                 print(f"  said: {said.strip() or '(nothing)'}", flush=True)
+                transcript.add(
+                    "ESTEBAN",
+                    f"{said.strip() or '(nothing)'}"
+                    f"   [after {time.monotonic() - asked:.1f}s]")
                 if args.once:
                     return 0
     except KeyboardInterrupt:
+        # Ctrl-C is how a call ENDS here, not a crash.  It used to escape
+        # as a traceback, which buried whatever had just happened under a
+        # stack that described nothing about the conversation.
+        print("\n  (call ended)", flush=True)
         return 0
     except SignalLost as exc:
         print(f"microphone: {exc}", file=sys.stderr)
@@ -288,6 +357,11 @@ async def main() -> int:
         return 1
     finally:
         mic.stop()
+        path = HERE / "out" / f"call-{datetime.now():%Y%m%d-%H%M%S}.txt"
+        print(f"\n  transcript of the call — mm:ss from its start\n")
+        print(transcript.render(), flush=True)
+        transcript.write(path)
+        print(f"\n  saved to {path.relative_to(HERE)}", flush=True)
 
 
 if __name__ == "__main__":
