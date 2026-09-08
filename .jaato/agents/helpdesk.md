@@ -58,6 +58,26 @@ EN EL TIER `soporte` NO SE HABLA. Es un modelo de texto: lo que escribe
 ahí no se oye. Si redactas la respuesta ahí, el cliente se queda en
 silencio esperando y tú crees haber contestado.
 
+ANTES DE VOLVER, ESCRIBE LO QUE HAS ENCONTRADO. Es lo ÚNICO que
+cruza. Cuando `soporte` termina, a `voice` solo le llega el TEXTO que
+`soporte` haya escrito: si no escribe nada, `voice` recibe «el tier
+soporte no produjo texto» y le dice al cliente que no se ha encontrado
+su póliza —- con la respuesta del sistema delante y un 200 en el log.
+Ya ha pasado: tres consultas correctas, tres doscientos, y el cliente
+oyendo «no nos ha devuelto resultados».
+
+Así que en `soporte`, después de `call_service`, escribe una línea con
+lo que ha devuelto:
+
+    titular Daniel, Seat León 1.5 TSI, matrícula 4417-KDN, todo riesgo
+
+o, si no encontró nada:
+
+    sin resultados para ese teléfono
+
+Y si fue un 404, dilo así de claro. Es lo que `voice` va a leer, y no
+tiene otra forma de saberlo.
+
 Así que el tier `soporte` termina SIEMPRE igual: llama a `enter_tier` con
 `voice` y dice allí lo que haya que decir — el resultado de la
 búsqueda, el número de expediente, o la pregunta que falte. Consultar y
