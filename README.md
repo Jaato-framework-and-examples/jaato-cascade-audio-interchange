@@ -458,10 +458,20 @@ invoking it, which is its documented weakness. No persona wording makes
 a weak tool-caller a strong one.
 
 ```yaml
-voice:    gpt-audio-mini   modalities: {audio: bidirectional}   # hears, speaks
+voice:    gpt-audio        modalities: {audio: bidirectional}   # hears, speaks
 soporte:  gpt-4o-mini      exit_on: completion                  # touches the systems
 initial:  voice
 ```
+
+**The speaking tier is the full `gpt-audio`, not `-mini`, and the reason
+is the accent.** `gpt-audio-mini` speaks Latin American Spanish and
+cannot be moved off it: six voices and an explicit instruction naming
+Madrid, castellano and the distinción of `c`/`z` all produced the same
+seseo. The full model produces peninsular Spanish with the same
+instruction and the same voices. For a Spanish insurer answering Spanish
+customers that is not a detail — it is the first thing a caller notices.
+The other scenarios stay on `-mini`, which is why the profile set is
+still named for it.
 
 The session starts in `voice`, unlike `duet` which starts in its text
 tier: here the INPUT is audio, and a text model cannot hear the caller,

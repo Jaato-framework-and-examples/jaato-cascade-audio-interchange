@@ -52,7 +52,19 @@ model_tiers:
   # does.  The four canonical names still carry framework meaning;
   # `vision` alone implies a modality role, so this tier states its own.
   voice:
-    model: openai/gpt-audio-mini
+    # The FULL gpt-audio, not `-mini`, and the reason is the accent.
+    #
+    # `gpt-audio-mini` speaks Latin American Spanish and cannot be moved
+    # off it: six voices (alloy, ash, coral, sage, verse, cedar, marin)
+    # and an explicit instruction naming Madrid, castellano and the
+    # distinción of c/z all produced the same seseo. The full model
+    # produces peninsular Spanish with the same instruction.
+    #
+    # This is a Spanish insurer talking to Spanish customers, so the
+    # accent is not a detail -- a Latin American voice answering
+    # "Línea Directa" is the first thing a caller in Madrid notices.
+    # It costs more per token than the mini; that is what it buys.
+    model: openai/gpt-audio
     provider: openrouter
     modalities: {audio: bidirectional}
     description: 'el único tier que el cliente oye; entra aquí para decir cualquier cosa en voz alta'
@@ -134,5 +146,7 @@ plugin_configs:
       # NO temperature — see speaker.yaml: 0.0 makes this model loop
       # catastrophically (818s of speech for a one-sentence answer).
       audio:
-        voice: alloy
+        # `marin` and `cedar` were both judged correct on the full
+        # model; `marin` by a coin toss. One word to change.
+        voice: marin
         format: pcm16
