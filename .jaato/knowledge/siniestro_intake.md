@@ -42,17 +42,26 @@ El resto del guion —- de §2 en adelante—- es la rama de GRÚA Y PARTE, y
 se recorre solo cuando el cliente ya ha dicho que ha tenido un golpe o
 que el coche no anda.
 
-## 2. Urgencia
+## 2. Urgencia — solo si no es evidente
 
 > «¿Necesitas la grúa cuanto antes o prefieres que la enviemos en otro
 > momento?»
 
-## 3. Qué ha pasado
+Quien llama con el coche parado ya ha contestado a esto al decir que
+está tirado. Preguntarlo entonces —- y peor, preguntarlo dos veces—-
+es lo que hace que una llamada canse.
+
+## 3. Qué ha pasado — OPCIONAL
 
 > «¿Me puedes contar qué ha pasado, <nombre>?»
 
-Una pregunta abierta, y le dejas hablar. De aquí sale casi todo lo
-demás sin tener que preguntarlo.
+Una pregunta abierta que suele ahorrar otras cinco, porque de la
+respuesta sale casi todo lo demás.
+
+Pero para MANDAR UNA GRÚA no hace falta saber por qué se ha parado el
+coche: hace falta saber dónde está. Si el cliente dice que lo explicará
+luego, o que solo quiere la grúa, se salta este punto y se va al 5. No
+se reformula ni se vuelve a intentar más adelante.
 
 ## 4. Distancia
 
