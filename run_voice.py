@@ -89,7 +89,8 @@ SCENARIOS = {
 SPEECH_BYTES_PER_SECOND = 24000 * 2
 
 
-def playback_sink(player: PulsePlayer, meter: Dict[str, int]):
+def playback_sink(player: PulsePlayer, meter: Dict[str, int],
+                  words: Optional[list] = None):
     """Adapt ``on_media`` events to the player, one stream at a time.
 
     The mirror of ``speech_sink`` in run_cascade.py, which collects to a
@@ -100,7 +101,14 @@ def playback_sink(player: PulsePlayer, meter: Dict[str, int]):
         payload = base64.b64decode(ev.data_b64)
         meter["bytes"] += len(payload)
         player.feed(ev.stream_id, ev.mime_type, payload)
+        # The FINAL chunk of model speech carries the utterance's own
+        # transcript (#869) -- the provider's words for the audio it just
+        # emitted, not either tier's account of what it meant to say. It
+        # is empty when the model also wrote text, so this never
+        # duplicates what AGENT_OUTPUT already delivered.
         if ev.final:
+            if words is not None and getattr(ev, "chunk", ""):
+                words.append(ev.chunk)
             player.finish(ev.stream_id)
     return _sink
 
@@ -220,6 +228,7 @@ async def speak(session, prompt: str, wav: Optional[bytes] = None) -> str:
     """
     player = PulsePlayer()
     meter = {"bytes": 0}
+    words: list = []
     attachments = None if wav is None else [
         {"mime_type": UTTERANCE_MIME, "data": wav,
          "display_name": "utterance.wav"}]
@@ -227,7 +236,7 @@ async def speak(session, prompt: str, wav: Optional[bytes] = None) -> str:
         text = await session.ask(
             prompt,
             attachments=attachments,
-            on_media=playback_sink(player, meter),
+            on_media=playback_sink(player, meter, words),
         )
     finally:
         player.finish_all()
@@ -242,6 +251,9 @@ async def speak(session, prompt: str, wav: Optional[bytes] = None) -> str:
     # inventing a transcript here would mean transcribing our own audio
     # to narrate something the person already has.
     seconds = meter["bytes"] / SPEECH_BYTES_PER_SECOND
+    spoken = " ".join(w.strip() for w in words if w.strip())
+    if spoken:
+        return f"{spoken}   [{seconds:.1f}s]"
     return text.strip() or f"(spoke {seconds:.1f}s)"
 
 

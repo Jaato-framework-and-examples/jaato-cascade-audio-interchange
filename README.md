@@ -525,7 +525,7 @@ it under `out/call-<when>.txt`:
   00:11.20  system   calls enter_tier({'tier': 'soporte'})
   00:13.60  system   calls call_service({'endpoint': 'buscar-poliza'})
   00:14.10  system   call_service returned ok {'titular': '…'}
-  00:23.40  ESTEBAN  (spoke 9.5s)   [after 11.3s]
+  00:23.40  ESTEBAN  He encontrado su póliza, es la LD-2026-…   [9.5s]
   00:41.00  caller   press dropped after 0.4s — discarded
 ```
 
@@ -535,12 +535,16 @@ consulted, and whether a press was dropped or refused. Ctrl-C used to
 escape as a traceback, burying whatever had just happened under a stack
 describing none of it.
 
-**It records durations, not words.** A spoken turn returns no text — the
-provider builds its transcript after streaming and no event carries it —
-and nothing transcribes the caller at all. Rather than leave blanks that
-read like silence, the record says what it knows and marks what it
-doesn't. To recover the words, feed a captured WAV to the `listener`
-profile.
+**Esteban's side carries his actual words.** The final media chunk of a
+spoken turn carries that utterance's transcript (#869) — the provider's
+own words for the audio it emitted, not either tier's account of what it
+meant to say. That distinction matters here: what `soporte` asks for and
+what `voice` says are two different texts, and only the second reached
+the caller.
+
+**The caller's side does not.** Nothing transcribes an incoming
+utterance, so those rows carry duration only. Feed a captured WAV to the
+`listener` profile when the words are wanted.
 
 ### Where the domain knowledge lives, and where it should live
 
