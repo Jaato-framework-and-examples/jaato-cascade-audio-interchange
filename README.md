@@ -19,7 +19,7 @@ python run_voice.py --scenario helpdesk   # tap the mic key and talk
     <- enter_tier ok
     -> call_service()                     ← a text model consults the systems
     <- call_service ok
-  [mock] "GET /v1/polizas?dni=51234567A" 200
+  [mock] "GET /v1/polizas?matricula=4417-KDN" 200
     -> enter_tier()                       ← and hands back to be heard
   said: (spoke 18.2s)
 ```
@@ -39,7 +39,7 @@ flowchart TD
     C -- "audio/wav attachment" --> V
 
     subgraph session ["one jaato session — never completes, so the call survives"]
-        V["<b>voice</b> tier · gpt-audio-mini<br/>modalities: {audio: bidirectional}<br/>hears · writes the data down · speaks"]
+        V["<b>voice</b> tier · gpt-audio<br/>modalities: {audio: bidirectional}<br/>hears · writes the data down · speaks"]
         N["<b>soporte</b> tier · gpt-4o-mini<br/>exit_on: completion<br/>calls the systems"]
         V -- "enter_tier(soporte)" --> N
         N -- "enter_tier(voice)" --> V
@@ -102,7 +102,7 @@ the only one that needs all of them.
 | `speaker` | audio out | one | `./run.sh` | outbound media, minimally — and the nudge misfiring |
 | `duet` | audio out | two | `./run.sh -s duet` | a hand-off that returns, via `exit_on: completion` |
 | `voice` | in **and** out | one | `python run_voice.py` | a spoken conversation, many turns on one session |
-| `listener` | audio in, **text** out | one | (used as an instrument) | reading back what was actually said |
+| `listener` | audio in, **text** out | one | runs beside `helpdesk` | transcribing the caller, and checking what was said |
 | `helpdesk` | in and out | two | `python run_voice.py --scenario helpdesk` | all of the above, plus systems it can consult |
 
 `speaker` and `duet` answer a TEXT question aloud and differ in shape:
@@ -426,7 +426,7 @@ can call them:
 
 | Operation | What it does |
 |-----------|--------------|
-| `buscar-poliza` | `GET /v1/polizas?poliza=…` or `?dni=…` — either key locates the customer |
+| `buscar-poliza` | `GET /v1/polizas?matricula=…` / `?poliza=…` / `?dni=…` — any ONE locates the customer |
 | `abrir-siniestro` | `POST /v1/siniestros` — registers the parte, returns the expediente number |
 
 ```
@@ -571,9 +571,13 @@ answering the caller instead of writing down what they said.
 
 ### Where the domain knowledge lives, and where it should live
 
-Cristina follows a real intake script — is anyone hurt, then policy
-number and DNI and plate, then the facts, then the other driver, then
-the 7-day deadline. That script is not in the persona. It sits in
+Cristina follows a real intake script — is anyone hurt, can the car be
+driven, then ONE of plate / policy / DNI to find the customer, then the
+facts, the other driver, and the 7-day deadline. The order is not
+cosmetic: the tow depends on the second question and is urgent, and the
+plate comes first among the three because a caller standing next to
+their car can say four digits and three letters without looking
+anything up. That script is not in the persona. It sits in
 `.jaato/knowledge/siniestro_intake.md` and is pulled into the prompt at
 session prep by a prefetch directive:
 
