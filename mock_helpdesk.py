@@ -37,7 +37,7 @@ PORT = int(os.environ.get("JAATO_HELPDESK_PORT", "8731"))
 #: which is worth showing too -- an operator who "finds" every policy is
 #: not demonstrating a lookup.
 POLIZAS = [
-    {"poliza": "LD-2026-004417", "titular": "Daniel Alonso Pérez",
+    {"poliza": "LD-2026-004417", "titular": "Daniel Alonso Gázquez",
      "dni": "51234567A", "matricula": "4417-KDN",
      "vehiculo": "Seat León 1.5 TSI (2021)",
      "cobertura": "todo_riesgo", "franquicia": 300.0, "alta": "2021-03-14"},
