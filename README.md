@@ -542,9 +542,22 @@ meant to say. That distinction matters here: what `soporte` asks for and
 what `voice` says are two different texts, and only the second reached
 the caller.
 
-**The caller's side does not.** Nothing transcribes an incoming
-utterance, so those rows carry duration only. Feed a captured WAV to the
-`listener` profile when the words are wanted.
+**The caller's side is transcribed in parallel.** Nothing in the answer
+path transcribes an incoming utterance — a chat-completions model
+consumes the audio and replies, it never echoes what it heard — so a
+second session on the `listener` profile hears the same utterance at the
+same time.
+
+Parallel, not afterwards, and that is the whole point: transcription
+takes ~1.5s while the agent spends 6-20s thinking and speaking, so it
+fits inside a gap that already exists. Measured: both together 8.5s,
+transcription alone 1.5s. It costs tokens, not time. `--no-transcribe`
+turns it off.
+
+A separate SESSION rather than a tier, because tiers take turns within
+one conversation and this has to happen simultaneously — and because
+`listener` must not see the helpdesk's history, or it would start
+answering the caller instead of writing down what they said.
 
 ### Where the domain knowledge lives, and where it should live
 

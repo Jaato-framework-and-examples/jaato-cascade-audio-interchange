@@ -52,6 +52,7 @@ import os
 import queue
 import sys
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
@@ -82,6 +83,13 @@ SCENARIOS = {
     "voice": {"profile": "voice", "agent": "voice", "greet": False},
     "helpdesk": {"profile": "helpdesk", "agent": "helpdesk", "greet": True},
 }
+
+#: Repeated with every utterance, because ONE session transcribes the
+#: whole call and a session that only ever hears speech starts answering
+#: it: by the second turn the listener replied "Claro, entiendo, y
+#: lamento lo del golpe" instead of writing down what was said. The
+#: persona alone did not hold it; restating the task each time does.
+TRANSCRIBE_CUE = "Transcribe literalmente este audio. Solo la transcripción."
 
 #: Reply audio is pcm16 at 24 kHz mono -- the only format OpenAI emits
 #: while streaming.  Used to report a spoken reply's LENGTH, since its
@@ -257,11 +265,74 @@ async def speak(session, prompt: str, wav: Optional[bytes] = None) -> str:
     return text.strip() or f"(spoke {seconds:.1f}s)"
 
 
+async def _nothing() -> str:
+    """Stand in for the listener when transcription is off."""
+    return ""
+
+
+@asynccontextmanager
+async def _listener_session(disabled: bool, profile: str, agent: str):
+    """Open the parallel listener, or yield None when it is not wanted.
+
+    A context manager so the caller's `async with` reads the same either
+    way, and so a listener that cannot start is not fatal: the record is
+    worth less than the call. The `voice` scenario has no systems to
+    consult and its own transcript already; only the helpdesk's caller
+    side is missing words, so a scenario without a `listener` profile
+    simply runs without one.
+    """
+    if disabled:
+        yield None
+        return
+    try:
+        async with IPCClient.session(
+                socket_path=SOCKET, env_file=ENV_FILE,
+                workspace_path=WORKSPACE, client_type=ClientType.API,
+                min_protocol_version=MEDIA_PROTOCOL, connect_timeout=120.0,
+                profile="listener", agent="listener") as listener:
+            yield listener
+    except (AgentError, SessionCreateFailed, OSError) as exc:
+        print(f"  (no transcription of your side: {type(exc).__name__})",
+              flush=True)
+        yield None
+
+
+async def hear(listener, wav: bytes) -> str:
+    """Transcribe one caller utterance, on a session of its own.
+
+    Runs BESIDE the answering turn, not after it. The agent spends
+    seconds thinking and speaking; the transcription of what was just
+    said fits inside that window, so a two-sided record costs the call
+    no extra time -- only the tokens.
+
+    A separate session, not a tier: tiers take turns within one
+    conversation, and this must happen SIMULTANEOUSLY with the answer.
+    It is also the right isolation -- `listener` must not see the
+    helpdesk's history, or it would start answering the caller instead
+    of writing down what they said.
+
+    Returns "" on any failure. A transcript is a record of the call, not
+    part of it: losing one must never cost the caller their answer.
+    """
+    try:
+        return (await listener.ask(TRANSCRIBE_CUE, attachments=[{
+            "mime_type": UTTERANCE_MIME, "data": wav,
+            "display_name": "caller.wav"}])).strip()
+    except Exception as exc:
+        # Name AND message: an earlier version reported only the type,
+        # and "(not transcribed: NameError)" said nothing about which
+        # name was missing -- which was the whole question.
+        return f"(not transcribed: {type(exc).__name__}: {exc})"
+
+
 async def main() -> int:
     parser = argparse.ArgumentParser(
         description="Speak to the agent; it speaks back.")
     parser.add_argument("--once", action="store_true",
                         help="handle one utterance and exit")
+    parser.add_argument("--no-transcribe", action="store_true",
+                        help="skip the parallel listener that writes down "
+                             "what the CALLER said (it costs tokens, not time)")
     parser.add_argument("-s", "--scenario", choices=sorted(SCENARIOS),
                         default="voice",
                         help="which demo to run (default: voice)")
@@ -326,7 +397,8 @@ async def main() -> int:
                 connect_timeout=120.0,
                 profile=profile,
                 agent=agent,
-        ) as session:
+        ) as session, _listener_session(
+                args.no_transcribe, profile, agent) as listening:
             trace_tools(session, transcript)
             # The agent answers the phone.  This happens BEFORE the mic
             # is read, so the caller hears the greeting and then decides
@@ -345,9 +417,18 @@ async def main() -> int:
                     continue
                 print(f"  heard {len(wav)} bytes; asking...", flush=True)
                 spoken_for = (len(wav) - 44) / BYTES_PER_SECOND
-                transcript.add("caller", f"spoke for {spoken_for:.1f}s")
                 asked = time.monotonic()
-                said = await speak(session, "", wav)
+                # Both at once. The transcription fits inside the time
+                # the agent spends answering, so the record costs the
+                # call nothing but tokens.
+                said, heard_words = await asyncio.gather(
+                    speak(session, "", wav),
+                    hear(listening, wav) if listening else _nothing())
+                transcript.add(
+                    "caller",
+                    heard_words or f"spoke for {spoken_for:.1f}s")
+                if heard_words:
+                    print(f"  heard: {heard_words}", flush=True)
                 print(f"  said: {said.strip() or '(nothing)'}", flush=True)
                 transcript.add(
                     "ESTEBAN",
