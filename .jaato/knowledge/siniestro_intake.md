@@ -15,8 +15,8 @@ nombre. Preguntarlos suena a que la compañía no le conoce, y al cliente
 que está tirado en la carretera le pone nervioso.
 
 En la llamada de referencia el asistente abre con «para tu coche Fiat
-500X» y más adelante dice «¿me puedes contar qué ha pasado, Adrián?».
-Nunca le pregunta quién es.
+500X» y llama al cliente por su nombre durante toda la llamada. Nunca
+le pregunta quién es.
 
 Solo si el teléfono NO localiza ninguna póliza —- un móvil prestado, un
 número que no es el del tomador—- se pide la matrícula, que es lo más
@@ -42,34 +42,27 @@ El resto del guion —- de §2 en adelante—- es la rama de GRÚA Y PARTE, y
 se recorre solo cuando el cliente ya ha dicho que ha tenido un golpe o
 que el coche no anda.
 
-## 2. Urgencia — solo si no es evidente
+## 2. Lo que NO se pregunta nunca
 
-> «¿Necesitas la grúa cuanto antes o prefieres que la enviemos en otro
-> momento?»
+Quien llama con el coche parado necesita la grúa YA: no hay que
+preguntarle si la quiere ahora o en otro momento. Y para mandarla no
+hace falta saber por qué se ha parado el coche, así que tampoco se le
+pide que cuente lo ocurrido.
 
-Quien llama con el coche parado ya ha contestado a esto al decir que
-está tirado. Preguntarlo entonces —- y peor, preguntarlo dos veces—-
-es lo que hace que una llamada canse.
+Ninguna de las dos cosas entra en la llamada. Si el cliente lo cuenta
+por su cuenta, se escucha y se usa; preguntarlo es lo que convierte una
+urgencia en un trámite.
 
-## 3. Qué ha pasado — OPCIONAL
+Lo mismo con todo lo que el sistema ya sabe: quién llama, qué coche
+tiene, en qué pueblo está esa calle y cuál es su código postal.
 
-> «¿Me puedes contar qué ha pasado, <nombre>?»
-
-Una pregunta abierta que suele ahorrar otras cinco, porque de la
-respuesta sale casi todo lo demás.
-
-Pero para MANDAR UNA GRÚA no hace falta saber por qué se ha parado el
-coche: hace falta saber dónde está. Si el cliente dice que lo explicará
-luego, o que solo quiere la grúa, se salta este punto y se va al 5. No
-se reformula ni se vuelve a intentar más adelante.
-
-## 4. Distancia
+## 3. Distancia
 
 > «¿Estás a más de cien kilómetros de tu domicilio habitual?»
 
 Decide la cobertura del remolque. Es sí o no.
 
-## 5. Dónde está el coche
+## 4. Dónde está el coche
 
 Lo único que hace falta preguntar es la CALLE, o una referencia si no
 hay calle a la vista. Con eso el sistema saca el resto.
@@ -98,25 +91,25 @@ Si la calle no aparece en el callejero (404), entonces sí se le
 pregunta la localidad, porque una dirección inventada manda la grúa a
 otro sitio.
 
-## 6. Confirma la dirección entera
+## 5. Confirma la dirección entera
 
 > «Entonces confirmo: avenida Maestro Santos Ruano, número trece,
 > Marchena, Sevilla. ¿Es correcto?»
 
-## 7. Teléfono de contacto
+## 6. Teléfono de contacto
 
 El de la póliza, para que lo confirme o dé otro. La grúa le va a
 llamar.
 
-## 8. Quién va en el coche
+## 7. Quién va en el coche
 
 > «¿Vas solo en el vehículo?»
 
-## 9. Algo más
+## 8. Algo más
 
 > «¿Algún detalle más que deba saber antes de solicitar el servicio?»
 
-## 10. Resume TODO y pide el sí
+## 9. Resume TODO y pide el sí
 
 > «Te resumo los datos para enviarte la grúa: necesitas que te
 > enviemos la grúa ahora porque el coche no arranca, vas solo en el
@@ -126,12 +119,12 @@ llamar.
 Es la última oportunidad de coger un error antes de mandar una grúa a
 otra calle.
 
-## 11. Avisa antes de callarte
+## 10. Avisa antes de callarte
 
 > «Dame unos segundos, voy a procesar tu solicitud. No cuelgues, por
 > favor.»
 
-## 12. Cierra diciendo qué va a pasar
+## 11. Cierra diciendo qué va a pasar
 
 > «Ya está todo gestionado y la grúa ha sido solicitada. En unos
 > minutos recibirás un SMS con el tiempo estimado de llegada, el
