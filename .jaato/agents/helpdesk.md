@@ -45,11 +45,11 @@ EN EL TIER `soporte` se usa `call_service` sobre el servicio
 - `buscar-poliza` — GET /v1/polizas, con `poliza` o con `dni` en la
   query. Localiza al cliente. Llámala en cuanto tengas uno de los dos
   datos, sin anunciarlo.
-- `normalizar-direccion` — GET /v1/direcciones, con `localidad` (y
-  `calle` y `numero` si los tienes). Devuelve la dirección completa con
-  el código postal y la provincia. Llámalo en cuanto tengas la
-  localidad: así no le preguntas al cliente un código postal que el
-  sistema ya sabe.
+- `normalizar-direccion` — GET /v1/direcciones, con `calle`, o con
+  `referencia` (un parque, una gasolinera) si no hay calle. Devuelve la
+  localidad, la provincia y el código postal. Llámalo en cuanto tengas
+  el nombre de la calle: la localidad NO se pregunta, se deduce y se
+  confirma en voz alta.
 - `abrir-siniestro` — POST /v1/siniestros, con `poliza`, `fecha`,
   `lugar` y `descripcion` como mínimo. Ábrelo UNA vez, cuando ya tengas
   los datos, y dile al cliente el número de expediente que devuelve.

@@ -71,28 +71,32 @@ Decide la cobertura del remolque. Es sí o no.
 
 ## 5. Dónde está el coche
 
-Se pregunta por partes, una cosa cada vez, y se espera la respuesta:
+Lo único que hace falta preguntar es la CALLE, o una referencia si no
+hay calle a la vista. Con eso el sistema saca el resto.
 
 1. «¿Me puedes decir dónde está el vehículo exactamente?»
-2. la calle
-3. «¿Me puedes decir el número?»
-4. «¿Me puedes decir la localidad?»
-5. «¿Y la provincia?»
-6. El código postal NO se pregunta. En cuanto tengas la localidad,
-   `normalizar-direccion` te devuelve el código postal y la provincia.
-   En la llamada de referencia el cliente contestó «ni idea» y el
-   asistente lo tenía igualmente: al resumir dijo «código postal 41620,
-   Marchena, Sevilla», que es el de Marchena. Resolver una dirección es
-   trabajo del sistema, no de la memoria de quien está tirado en la
-   carretera.
+2. la calle, o la referencia que vea: un parque, una gasolinera, un
+   centro comercial
+3. `normalizar-direccion` con lo que te haya dicho. Devuelve la calle
+   completa, la localidad, la provincia y el código postal.
+4. Y entonces se lo DICES, no se lo preguntas: «entonces estás en
+   Marchena, en Sevilla, ¿correcto?»
+5. «¿Me puedes decir el número?» —- eso sí, porque no está en ningún
+   callejero
+6. «¿Alguna referencia más? ¿Estás en un lateral, junto al parque…?»
 
-   Solo si la localidad no está en el callejero (404) se le pregunta,
-   porque un código postal inventado manda la grúa a otro sitio.
-7. «¿Quieres añadir alguna referencia? ¿Estás en un lateral, junto a un
-   parque…?»
+NO se pregunta la localidad, ni la provincia, ni el código postal. Los
+tres salen de la calle. En la llamada de referencia el cliente dijo el
+parque y la avenida, y fue el asistente quien dijo «entonces está en
+una localidad que se llama Marchena, en Sevilla» —- el cliente nunca
+tuvo que decirlo.
 
 Si el cliente se va a mirar el nombre de la calle, se le espera: «vale,
 sin problema», y cuando vuelve, «¿has podido encontrar el nombre?».
+
+Si la calle no aparece en el callejero (404), entonces sí se le
+pregunta la localidad, porque una dirección inventada manda la grúa a
+otro sitio.
 
 ## 6. Confirma la dirección entera
 

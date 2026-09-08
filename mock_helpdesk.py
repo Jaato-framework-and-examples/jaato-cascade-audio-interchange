@@ -120,48 +120,83 @@ def abrir_siniestro(query, body):
     }
 
 
-#: What an address service knows.  A real one covers the country; this
-#: holds the towns the demo uses, because a mock that invented a
-#: postcode for any input would be teaching the agent to trust made-up
-#: data -- which is the failure this whole persona is written against.
+#: What an address service knows: STREETS, not just towns.
+#:
+#: The reference recording works this way round. The caller said the
+#: street and a park, never the town, and the assistant came back with
+#: "entonces está en una localidad que se llama Marchena, en Sevilla"
+#: and later filled in the postcode himself. A street name is almost
+#: unique in Spain, so it is enough to place a caller who has no idea
+#: where he is beyond the name on the sign in front of him.
+#:
+#: A real callejero covers the country; this holds the demo's streets,
+#: because a mock that invented a town for any input would be teaching
+#: the agent to trust made-up data.
 CALLEJERO = [
-    {"localidad": "Marchena", "provincia": "Sevilla", "cp": "41620"},
-    {"localidad": "Sevilla", "provincia": "Sevilla", "cp": "41001"},
-    {"localidad": "Madrid", "provincia": "Madrid", "cp": "28001"},
-    {"localidad": "Getafe", "provincia": "Madrid", "cp": "28901"},
-    {"localidad": "Alcalá de Henares", "provincia": "Madrid", "cp": "28801"},
+    {"calle": "Avenida Maestro Santos Ruano", "referencia": "Parque del Príncipe",
+     "localidad": "Marchena", "provincia": "Sevilla", "cp": "41620"},
+    {"calle": "Calle Sierpes", "referencia": "Catedral",
+     "localidad": "Sevilla", "provincia": "Sevilla", "cp": "41004"},
+    {"calle": "Calle de Alcalá", "referencia": "Puerta del Sol",
+     "localidad": "Madrid", "provincia": "Madrid", "cp": "28014"},
+    {"calle": "Calle Madrid", "referencia": "Hospital de Getafe",
+     "localidad": "Getafe", "provincia": "Madrid", "cp": "28901"},
 ]
 
 
 def _fold(text: str) -> str:
-    """Compare town names as they are SAID, not as they are spelled."""
+    """Compare names as they are SAID, not as they are spelled."""
     import unicodedata
     plain = unicodedata.normalize("NFKD", (text or "").lower())
     return "".join(c for c in plain if c.isalnum())
 
 
-def normalizar_direccion(query, body):
-    """GET /v1/direcciones?localidad=…&calle=…&numero=…
+def _matches(row, field, value):
+    """A spoken street name against a written one, loosely.
 
-    Completes what the caller could not supply.  In the reference
-    recording the caller answered "ni idea" to the postcode and the
-    assistant simply had it -- resolving an address is the service's
-    job, not the customer's memory.
+    Two things happen to a street name on its way here and both must
+    still match. Callers drop the type of road -- "Maestro Santos
+    Ruano" for "Avenida Maestro Santos Ruano" -- which containment
+    handles. And a transcriber loses a letter: this exact street came
+    back from the reference recording as "Maestro Santo Ruano", one `s`
+    short, which containment does NOT handle and which a strict lookup
+    would answer with "no existe esa calle" to a driver standing on it.
+
+    So containment first, then a similarity ratio for the near miss.
+    0.85 accepts a letter or two of drift across a name this long and
+    refuses a different street; the agent reads the result back aloud
+    either way, so a wrong match is caught by the caller, not by this.
     """
-    localidad = _fold((query.get("localidad") or [""])[0])
-    if not localidad:
-        return 400, {"error": "indique_localidad"}
+    from difflib import SequenceMatcher
+    a, b = _fold(row.get(field, "")), _fold(value)
+    if not a or not b:
+        return False
+    return a in b or b in a or SequenceMatcher(None, a, b).ratio() >= 0.85
+
+
+def normalizar_direccion(query, body):
+    """GET /v1/direcciones?calle=…&localidad=…&referencia=…&numero=…
+
+    ANY of street, town or landmark places the address; the rest comes
+    back filled in. In the reference call the caller supplied a street
+    and a park and was never asked for the town or the postcode.
+    """
+    given = {k: (query.get(k) or [""])[0] for k in
+             ("calle", "localidad", "referencia", "numero")}
+    if not any(given[k] for k in ("calle", "localidad", "referencia")):
+        return 400, {"error": "indique_calle_localidad_o_referencia"}
     for row in CALLEJERO:
-        if _fold(row["localidad"]) == localidad:
+        if any(given[k] and _matches(row, k, given[k])
+               for k in ("calle", "localidad", "referencia")):
             return 200, {
-                "calle": (query.get("calle") or [""])[0] or None,
-                "numero": (query.get("numero") or [""])[0] or None,
+                "calle": row["calle"],
+                "numero": given["numero"] or None,
+                "referencia": row["referencia"],
                 "localidad": row["localidad"],
                 "provincia": row["provincia"],
                 "codigo_postal": row["cp"],
             }
-    return 404, {"error": "localidad_no_encontrada",
-                 "buscado": (query.get("localidad") or [""])[0]}
+    return 404, {"error": "direccion_no_encontrada", "buscado": given}
 
 
 ROUTES = {
